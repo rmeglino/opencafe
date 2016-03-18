@@ -12,7 +12,6 @@
 # under the License.
 
 from cafe.engine.clients.base import BaseClient
-from cafe.common.reporting import cclogging
 
 
 class SQLClientException(Exception):
@@ -30,7 +29,6 @@ class BaseSQLClient(BaseClient):
     .. seealso:: http://www.python.org/dev/peps/pep-0249
     """
 
-    _log = cclogging.getLogger(__name__)
     _driver = None
     _connection = None
 

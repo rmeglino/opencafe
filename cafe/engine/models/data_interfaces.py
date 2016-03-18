@@ -17,7 +17,7 @@ import os
 from six.moves import configparser
 from six import add_metaclass
 
-from cafe.common.reporting import cclogging
+from cafe.engine.base import BaseCafeClass
 from cafe.engine.config import EngineConfig
 try:
     from cafe.engine.mongo.client import BaseMongoClient
@@ -74,12 +74,7 @@ CONFIG_KEY = 'CAFE_{section_name}_{key}'
 
 
 @add_metaclass(abc.ABCMeta)
-class DataSource(object):
-
-    def __init__(self):
-        self._log = cclogging.logging.getLogger(
-            cclogging.get_object_namespace(self.__class__))
-
+class DataSource(BaseCafeClass):
     def get(self, item_name, default=None):
         raise NotImplementedError
 
@@ -100,8 +95,8 @@ class DataSource(object):
             return value.lower() == 'true'
         return None
 
-    @staticmethod
-    def _parse_json(value, log=None):
+    @classmethod
+    def _parse_json(cls, value):
         """Parse the value as JSON. Returns None if value is invalid JSON."""
         if not value:
             return None
@@ -109,9 +104,8 @@ class DataSource(object):
         try:
             return json.loads(value)
         except ValueError as error:
-            if log is not None:
-                log.warning("Invalid JSON '{0}'. ValueError: {1}"
-                            .format(value, error))
+            cls._log.warning(
+                "Invalid JSON '{0}'. ValueError: {1}".format(value, error))
             return None
 
 
@@ -300,15 +294,13 @@ class MongoDataSource(DictionaryDataSource):
         self._data_source = self.db.find_one({'config_name': config_name})
 
 
-class BaseConfigSectionInterface(object):
+class BaseConfigSectionInterface(BaseCafeClass):
     """Base class for building an interface for the data contained in a
     SafeConfigParser object, as loaded from the config file as defined
     by the engine's config file.
     """
 
     def __init__(self, config_file_path, section_name):
-        self._log = cclogging.logging.getLogger(
-            cclogging.get_object_namespace(self.__class__))
         self._override = EnvironmentVariableDataSource(
             section_name)
         self._data_source = ConfigParserDataSource(
