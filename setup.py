@@ -45,13 +45,12 @@ for dirpath, directories, filenames in os.walk(dir_path):
         plugins.append(target_file)
 
 setup(
-    name='opencafe',
+    name='decafe',
     version='0.2.4',
     description='The Common Automation Framework Engine',
     long_description='{0}'.format(open('README.rst').read()),
-    author='CafeHub',
-    author_email='cloud-cafe@lists.rackspace.com',
-    url='http://opencafe.readthedocs.org',
+    author='DecafeHub',
+    url='http://decafe.readthedocs.org',
     install_requires=['six'],
     packages=find_packages(exclude=('tests*', 'docs')),
     package_data={'cafe': plugins},
