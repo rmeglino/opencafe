@@ -104,6 +104,7 @@ class UnittestRunner(object):
         workers = int(not self.cl_args.parallel) or self.cl_args.workers
 
         # enumerate is used to count suites
+        count=0
         for count, (tests, class_, dataset) in enumerate(self.suites):
             create_dd_class(class_, dataset)
             to_worker.put((tests, class_, dataset))
