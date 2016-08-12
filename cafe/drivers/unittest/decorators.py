@@ -10,19 +10,37 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+from importlib import import_module
 from unittest import TestCase
 from warnings import warn, simplefilter
 import inspect
 import re
 
 from cafe.common.reporting import cclogging
-from cafe.drivers.unittest.datasets import DatasetList, create_dd_class
+from cafe.drivers.unittest.config import DriverConfig
+from cafe.drivers.unittest.datasets import DatasetList, _Dataset
+from cafe.drivers.unittest.fixtures import BaseTestFixture
+
 
 DATA_DRIVEN_TEST_ATTR = "__data_driven_test_data__"
 DATA_DRIVEN_TEST_PREFIX = "ddtest_"
 TAGS_DECORATOR_ATTR_DICT_NAME = "__test_attrs__"
 TAGS_DECORATOR_TAG_LIST_NAME = "__test_tags__"
 PARALLEL_TAGS_LIST_ATTR = "__parallel_test_tags__"
+DD_CONFIG = DriverConfig()
+
+
+def create_dd_class(class_, dataset):
+    """Creates a class that inherits from the class passed in and contains
+    variables from the dataset.  The name is also from the dataset
+    """
+    if dataset is None:
+        return class_
+    new_class = type(dataset.name, (class_,), dataset.data)
+    new_class.__module__ = class_.__module__
+    module = import_module(class_.__module__)
+    setattr(module, new_class.__name__, new_class)
+    return new_class
 
 
 class DataDrivenFixtureError(Exception):
@@ -84,19 +102,92 @@ def data_driven_test(*dataset_sources, **kwargs):
     return decorator
 
 
+class EmptyDSLError(Exception):
+    """Custom exception to allow errors in Datadriven classes with no data."""
+    def __init__(self, dsl_namespace, original_test_list):
+        general_message = (
+            "The Dataset list used to generate this Data Driven Class was "
+            "empty. No Fixtures or Tests were generated. Review the Dataset "
+            "used to run this test.")
+        DSL_information = "Dataset List location: {dsl_namespace}".format(
+            dsl_namespace=dsl_namespace)
+        pretty_test_list_header = (
+            "The following {n} tests were not run".format(
+                n=len(original_test_list)))
+        pretty_test_list = "\t" + "\n\t".join(original_test_list)
+        self.message = (
+            "{general_message}\n{DSL_information}\n\n"
+            "{pretty_test_list_header}\n{pretty_test_list}").format(
+                general_message=general_message,
+                DSL_information=DSL_information,
+                pretty_test_list_header=pretty_test_list_header,
+                pretty_test_list=pretty_test_list)
+        super(EmptyDSLError, self).__init__(self.message)
+
+
+class _FauxDSLFixture(BaseTestFixture):
+    """Faux Test Fixture and Test class to inject into DDC that lack data."""
+
+    dsl_namespace = None
+    original_test_list = []
+
+    # This is so we don't have to call super as there will never be anything
+    # here.
+    _class_cleanup_tasks = []
+
+    @classmethod
+    def setUpClass(cls):
+        """setUpClass to force a fixture error for DDCs which lack data."""
+        raise EmptyDSLError(
+            dsl_namespace=cls.dsl_namespace,
+            original_test_list=cls.original_test_list)
+
+    # A test method is required in order to allow this to be injected without
+    # making changes to Unittest itself.
+    def test_data_failed_to_generate(self):
+        """Faux test method to allow injection."""
+        pass
+
+
 def DataDrivenClass(*dataset_lists):
-    """Use data driven class decorator. designed to be used on a fixture"""
+    """Use data driven class decorator. designed to be used on a fixture."""
     def decorator(cls):
         """Creates classes with variables named after datasets.
         Names of classes are equal to (class_name with out fixture) + ds_name
         """
         cls = DataDrivenFixture(cls)
+        class_name = re.sub("fixture", "", cls.__name__, flags=re.IGNORECASE)
         if not re.match(".*fixture", cls.__name__, flags=re.IGNORECASE):
             cls.__name__ = "{0}Fixture".format(cls.__name__)
-        for dataset_list in dataset_lists:
+        for i, dataset_list in enumerate(dataset_lists):
+            if (not dataset_list and
+               not DD_CONFIG.ignore_empty_datasets):
+                # The DSL did not generate anything
+                class_name_new = "{class_name}_{exception}_{index}".format(
+                    class_name=class_name,
+                    exception="DSL_EXCEPTION",
+                    index=i)
+                # We are creating a new, special class here that willd allow us
+                # to force an error during test set up that contains
+                # information useful for triaging the DSL failure.
+                # Additionally this should surface any tests that did not run
+                # due to the DSL issue.
+                test_ls = [test for test in dir(cls) if test.startswith(
+                    "test_")]
+                if dataset_list.__class__ is list:
+                    cls_ns = cls
+                else:
+                    cls_ns = dataset_list.__class__
+
+                data = {
+                    "dsl_namespace": cclogging.get_object_namespace(cls_ns),
+                    "original_test_list": test_ls,
+                    "__module__": cls.__module__}
+                create_dd_class(_FauxDSLFixture, _Dataset(
+                    class_name_new, data))
+
             for dataset in dataset_list:
-                class_name = re.sub(
-                    "fixture", "", cls.__name__, flags=re.IGNORECASE)
+
                 dataset.name = "{0}_{1}".format(class_name, dataset.name)
                 create_dd_class(cls, dataset)
         return cls

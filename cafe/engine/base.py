@@ -13,12 +13,12 @@
 
 from cafe.common.reporting import cclogging
 
+
 class ClassPropertyDescriptor(object):
     def __init__(self, fget):
         self.fget = fget
 
     def __get__(self, obj, klass=None):
-        print [self, obj, klass]
         if klass is None:
             klass = type(obj)
         return self.fget.__get__(obj, klass)()

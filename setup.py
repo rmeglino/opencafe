@@ -46,11 +46,12 @@ for dirpath, directories, filenames in os.walk(dir_path):
 
 setup(
     name='decafe',
-    version='0.2.4',
+    version='0.3.1',
     description='The Common Automation Framework Engine',
     long_description='{0}'.format(open('README.rst').read()),
-    author='DecafeHub',
-    url='http://decafe.readthedocs.org',
+    author='CafeHub',
+    author_email='cloud-cafe@lists.rackspace.com',
+    url='http://opencafe.readthedocs.org',
     install_requires=['six'],
     packages=find_packages(exclude=('tests*', 'docs')),
     package_data={'cafe': plugins},
@@ -68,6 +69,7 @@ setup(
         'console_scripts':
         ['cafe-runner = cafe.drivers.unittest.runner:entry_point',
          'cafe-parallel = cafe.drivers.unittest.runner_parallel:entry_point',
+         'cafe-brew = cafe.drivers.unittest.brew.runner:entry_point',
          'behave-runner = cafe.drivers.behave.runner:entry_point',
          'vows-runner = cafe.drivers.pyvows.runner:entry_point',
          'specter-runner = cafe.drivers.specter.runner:entry_point',

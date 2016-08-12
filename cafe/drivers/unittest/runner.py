@@ -20,7 +20,6 @@ import unittest
 import uuid
 from importlib import import_module
 from inspect import isclass
-from multiprocessing import Process, Manager
 from re import search
 from traceback import print_exc
 from cafe.common.reporting import cclogging
@@ -31,6 +30,16 @@ from cafe.drivers.unittest.parsers import SummarizeResults
 from cafe.drivers.unittest.suite import OpenCafeUnittestTestSuite
 from cafe.engine.config import EngineConfig, ENGINE_CONFIG_PATH
 from cafe.engine.models.data_interfaces import CONFIG_KEY
+
+# Support for the alternate dill-based multiprocessing library 'multiprocess'
+# as an experimental workaround if you're having pickling errors.
+try:
+    from multiprocess import Process, Manager
+    sys.stdout.write(
+        "\n\nUtilizing the pathos multiprocess library. "
+        "This feature is experimental\n\n")
+except:
+    from multiprocessing import Process, Manager
 
 
 def tree(directory, padding, print_files=False):
@@ -842,10 +851,10 @@ class UnittestRunner(object):
 
         if result_type is not None:
             result_parser = SummarizeResults(
-                vars(result), master_suite)
+                vars(result), master_suite, total_execution_time)
             all_results = result_parser.gather_results()
             reporter = Reporter(
-                total_execution_time, all_results)
+                result_parser=result_parser, all_results=all_results)
             reporter.generate_report(
                 result_type=result_type, path=results_path)
 

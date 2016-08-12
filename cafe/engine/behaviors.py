@@ -13,5 +13,56 @@
 from cafe.engine.base import BaseCafeClass
 
 
+class RequiredClientNotDefinedError(Exception):
+    """Raised when a behavior method call can't find a required client """
+    pass
+
+
+def behavior(*required_clients):
+    """Decorator that tags method as a behavior, and optionally adds
+    required client objects to an internal attribute.  Causes calls to this
+    method to throw RequiredClientNotDefinedError exception if the containing
+    class does not have the proper client instances defined.
+    """
+
+    def _decorator(func):
+        # Unused for now
+        setattr(func, '__is_behavior__', True)
+        setattr(func, '__required_clients__', [])
+        for client in required_clients:
+            func.__required_clients__.append(client)
+
+        def _wrap(self, *args, **kwargs):
+            available_attributes = vars(self)
+            missing_clients = []
+            all_requirements_satisfied = True
+
+            if required_clients:
+                for required_client in required_clients:
+                    required_client_found = False
+                    for attr in available_attributes:
+                        attribute = getattr(self, attr, None)
+                        if isinstance(attribute, required_client):
+                            required_client_found = True
+                            break
+
+                    all_requirements_satisfied = (
+                        all_requirements_satisfied and
+                        required_client_found)
+
+                    missing_clients.append(required_client)
+
+                if not all_requirements_satisfied:
+                    msg_plurality = ("an instance" if len(missing_clients) <= 1
+                                     else "instances")
+                    msg = ("Behavior {0} expected {1} of {2} but couldn't"
+                           " find one".format(
+                               func, msg_plurality, missing_clients))
+                    raise RequiredClientNotDefinedError(msg)
+            return func(self, *args, **kwargs)
+        return _wrap
+    return _decorator
+
+
 class BaseBehavior(BaseCafeClass):
     pass
