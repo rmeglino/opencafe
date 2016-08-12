@@ -1,4 +1,4 @@
-# Copyright 2015 Rackspace
+# Copyright 2016 Rackspace
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
@@ -10,24 +10,196 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+from xml.etree import ElementTree as ET
+import json
 import logging
+import re
 import six
 
 from cafe.engine.base import BaseCafeClass
 
 
-class CommonToolsMixin(object):
-    """Methods used to make building data models easier, common to all types"""
+def encode(val):
+    if isinstance(val, six.binary_type):
+        string = val
+    elif isinstance(val, six.string_types):
+        string = val.encode("UTF-8")
+    else:
+        string = str(val).encode("UTF-8")
+    return string
+
+
+class BaseModel(BaseCafeClass):
+    __REPR_SEPARATOR__ = '\n'
+
+    def __eq__(self, obj):
+        try:
+            if vars(obj) == vars(self):
+                return True
+        except:
+            pass
+        return False
+
+    def __ne__(self, obj):
+        return not self.__eq__(obj)
+
+    def __str__(self):
+        string = b"<%s object>\n" % (six.b(type(self).__name__))
+        for key, val in vars(self).items():
+            if isinstance(val, logging.Logger):
+                continue
+            key = six.b(key)
+            string += b"%s = %s\n" % (key, encode(val))
+        try:
+            return string.decode("UTF-8")
+        except:
+            self._log.warning("Invalid UTF-8, binary returned from __str__")
+            return string
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class AutoMarshallingModel(BaseModel):
+
+    def __init__(self, kwargs=None):
+        if kwargs is None:
+            return
+        for k, v in kwargs.items():
+            if k != "self":
+                setattr(self, k, v)
+
+    def _obj_to_json(self):
+        return json.dumps(self._obj_to_dict())
+
+    def _obj_to_xml(self):
+        element = self._obj_to_xml_ele()
+        return ET.tostring(element)
+
+    @classmethod
+    def _json_to_obj(cls, string):
+        data = json.loads(string, strict=False)
+        return cls._dict_to_obj(data)
+
+    @classmethod
+    def _xml_to_obj(cls, string):
+        data = cls._remove_namespaces(ET.fromstring(string))
+        return cls._xml_ele_to_obj(data)
+
+    def _obj_to_dict(self):
+        raise NotImplemented
+
+    def _obj_to_xml_ele(self):
+        raise NotImplemented
+
+    @classmethod
+    def _dict_to_obj(cls, string):
+        raise NotImplemented
+
+    @classmethod
+    def _xml_ele_to_obj(cls, string):
+        raise NotImplemented
+
+    @classmethod
+    def _remove_namespaces(cls, element):
+        for key, value in element.attrib.items():
+            if key.startswith("{"):
+                element.set(re.sub("{.*}", "", key), value)
+                del element.attrib[key]
+        element.tag = re.sub("{.*}", "", element.tag)
+        for child in element:
+            cls._remove_namespaces(child)
+        return element
 
     @staticmethod
-    def _bool_to_string(value, true_string='true', false_string='false'):
-        """Returns a string representation of a boolean value, or the value
-        provided if the value is not an instance of bool
-        """
+    def _get_sub_model(model, format_type="dict"):
+        if model is None:
+            if format_type == "dict":
+                return None
+            elif format_type == "xml_ele":
+                return ET.Element(None)
+            else:
+                return None
+        if format_type == "dict":
+            name = "_obj_to_dict"
+        elif format_type == "xml_ele":
+            name = "_obj_to_xml_ele"
+        else:
+            return None
+        func = getattr(model, name)
+        return func()
 
-        if isinstance(value, bool):
-            return true_string if value is True else false_string
-        return value
+    @classmethod
+    def _remove_empty_values(cls, data):
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if v not in ([], {}, None)}
+        elif isinstance(data, ET.Element):
+            data.attrib = cls._remove_empty_values(data.attrib)
+            data._children = [
+                c for c in data._children if c.tag is not None and (
+                    c.attrib, c.text, c._children)]
+            return data
+
+    @staticmethod
+    def _build_list_model(data, field_name, model):
+        """ Expects data to be a dictionary"""
+        if data is None:
+            raise Exception(
+                "expected data to be a dictionary, received None instead")
+        if isinstance(data, dict):
+            if data.get(field_name) is None:
+                raise Exception(
+                    "Expected field name {0} was None or non-existent".format(
+                        field_name))
+            return [model._dict_to_obj(tmp) for tmp in data.get(field_name)]
+        elif isinstance(data, list):
+            return [model._dict_to_obj(tmp) for tmp in data]
+        return [model._xml_ele_to_obj(tmp) for tmp in data.findall(field_name)]
+
+    @staticmethod
+    def _build_list(items, element=None):
+        if element is None:
+            if items is None:
+                return []
+            return [item._obj_to_dict() for item in items]
+        else:
+            if items is None:
+                return element
+            for item in items:
+                element.append(item._obj_to_xml_ele())
+            return element
+
+    @staticmethod
+    def _find(element, tag):
+        return None if element is None else element.find(tag)
+
+    def serialize(self, format_type):
+        serialize_method = '_obj_to_{0}'.format(format_type)
+        return getattr(self, serialize_method)()
+
+    @classmethod
+    def deserialize(cls, serialized_str, format_type):
+        try:
+            deserialize_method = '_{0}_to_obj'.format(format_type)
+            model_object = getattr(cls, deserialize_method)(serialized_str)
+        except Exception as deserialization_exception:
+            cls._log.exception(deserialization_exception)
+            try:
+                cls._log.debug(
+                    u"Deserialization Error: Attempted to deserialize type"
+                    u" using type: {0}".format(format_type.decode(
+                        encoding='UTF-8', errors='ignore')))
+                cls._log.debug(
+                    u"Deserialization Error: Unble to deserialize the "
+                    u"following:\n{0}".format(serialized_str.decode(
+                        encoding='UTF-8', errors='ignore')))
+            except Exception as exception:
+                cls._log.exception(exception)
+                cls._log.debug(
+                    "Unable to log information regarding the "
+                    "deserialization exception")
+            model_object = None
+        return model_object
 
     @staticmethod
     def _string_to_bool(boolean_string):
@@ -43,16 +215,17 @@ class CommonToolsMixin(object):
                 .format(boolean_string))
 
     @staticmethod
-    def _remove_empty_values(dictionary):
-        """Returns a new dictionary based on 'dictionary', minus any keys with
-        values that are None
+    def _bool_to_string(value, true_string='true', false_string='false'):
+        """Returns a string representation of a boolean value, or the value
+        provided if the value is not an instance of bool
         """
 
-        return dict(
-            (k, v) for k, v in six.iteritems(dictionary) if v is not None)
+        if isinstance(value, bool):
+            return true_string if value is True else false_string
+        return value
 
-    @staticmethod
-    def _replace_dict_key(dictionary, old_key, new_key, recursion=False):
+    @classmethod
+    def _replace_dict_key(cls, dictionary, old_key, new_key, recursion=False):
         """Replaces key names in a dictionary, by default only first level keys
         will be replaced, recursion needs to be set to True for replacing keys
         in nested dicts and/or lists
@@ -64,192 +237,20 @@ class CommonToolsMixin(object):
         if recursion:
             for key, value in dictionary.items():
                 if isinstance(value, dict):
-                    CommonToolsMixin._replace_dict_key(value, old_key, new_key,
-                                                       recursion=True)
+                    cls._replace_dict_key(
+                        value, old_key, new_key, recursion=True)
                 elif isinstance(value, list):
                     dictionaries = (
                         item for item in value if isinstance(item, dict))
                     for x in dictionaries:
-                        CommonToolsMixin._replace_dict_key(x, old_key, new_key,
-                                                           recursion=True)
+                        cls._replace_dict_key(
+                            x, old_key, new_key, recursion=True)
         return dictionary
 
 
-class JSON_ToolsMixin(object):
-    """Methods used to make building json data models easier"""
-
+class AutoMarshallingListModel(list, AutoMarshallingModel):
     pass
 
 
-class XML_ToolsMixin(object):
-    """Methods used to make building xml data models easier"""
-
-    _XML_VERSION = '1.0'
-    _ENCODING = 'UTF-8'
-
-    @property
-    def xml_header(self):
-        return "<?xml version='{version}' encoding='{encoding}'?>".format(
-            version=self._XML_VERSION, encoding=self._ENCODING)
-
-    @staticmethod
-    def _set_xml_etree_element(
-            xml_etree, property_dict, exclude_empty_properties=True):
-        '''Sets a dictionary of keys and values as properties of the xml etree
-        element if value is not None. Optionally, add all keys and values as
-        properties if only if exclude_empty_properties == False.
-        '''
-        if exclude_empty_properties:
-            property_dict = CommonToolsMixin._remove_empty_values(
-                property_dict)
-
-        for key in property_dict:
-            xml_etree.set(key, property_dict[key])
-        return xml_etree
-
-    @staticmethod
-    def _remove_xml_etree_namespace(doc, *namespaces):
-        """Remove namespaces in the passed document in place."""
-
-        for namespace in namespaces:
-            ns = six.u("{{{0}}}".format(namespace))
-            nsl = len(ns)
-            for elem in list(doc.iter()):
-                for key in elem.attrib:
-                    if key.startswith(ns):
-                        new_key = key[nsl:]
-                        elem.attrib[new_key] = elem.attrib[key]
-                        del elem.attrib[key]
-                if elem.tag.startswith(ns):
-                    elem.tag = elem.tag[nsl:]
-        return doc
-
-
-class BaseModel(BaseCafeClass):
-    __REPR_SEPARATOR__ = '\n'
-
-    def __eq__(self, obj):
-        try:
-            if vars(obj) == vars(self):
-                return True
-        except:
-            pass
-
-        return False
-
-    def __ne__(self, obj):
-        return not self.__eq__(obj)
-
-    def __str__(self):
-        strng = '<{0} object> {1}'.format(
-            type(self).__name__, self.__REPR_SEPARATOR__)
-        for key in list(vars(self).keys()):
-            val = getattr(self, key)
-            if isinstance(val, logging.Logger):
-                continue
-            elif isinstance(val, six.text_type):
-                strng = '{0}{1} = {2}{3}'.format(
-                    strng, key, val.encode("utf-8"), self.__REPR_SEPARATOR__)
-            else:
-                strng = '{0}{1} = {2}{3}'.format(
-                    strng, key, val, self.__REPR_SEPARATOR__)
-        return '{0}'.format(strng)
-
-    def __repr__(self):
-        return self.__str__()
-
-
-# Splitting the xml and json stuff into mixins cleans up the code but still
-# muddies the AutoMarshallingModel namespace.  We could create
-# tool objects in the AutoMarshallingModel, which would just act as
-# sub-namespaces, to keep it clean. --Jose
-class AutoMarshallingModel(
-        BaseModel, CommonToolsMixin, JSON_ToolsMixin, XML_ToolsMixin):
-    """
-    @summary: A class used as a base to build and contain the logic necessary
-             to automatically create serialized requests and automatically
-             deserialize responses in a format-agnostic way.
-    """
-
-    def serialize(self, format_type):
-        serialization_exception = None
-        try:
-            serialize_method = '_obj_to_{0}'.format(format_type)
-            return getattr(self, serialize_method)()
-        except Exception as serialization_exception:
-            pass
-
-        if serialization_exception:
-            try:
-                self._log.error(
-                    'Error occured during serialization of a data model into'
-                    'the "{0}: \n{1}" format'.format(
-                        format_type, serialization_exception))
-                self._log.exception(serialization_exception)
-            except Exception as exception:
-                self._log.exception(exception)
-                self._log.debug(
-                    "Unable to log information regarding the "
-                    "deserialization exception due to '{0}'".format(
-                        serialization_exception))
-        return None
-
-    @classmethod
-    def deserialize(cls, serialized_str, format_type):
-        model_object = None
-        deserialization_exception = None
-        if serialized_str and len(serialized_str) > 0:
-            try:
-                deserialize_method = '_{0}_to_obj'.format(format_type)
-                model_object = getattr(cls, deserialize_method)(serialized_str)
-            except Exception as deserialization_exception:
-                cls._log.exception(deserialization_exception)
-
-        # Try to log string and format_type if deserialization broke
-        if deserialization_exception is not None:
-            try:
-                cls._log.debug(
-                    "Deserialization Error: Attempted to deserialize type"
-                    " using type: {0}".format(format_type.decode(
-                        encoding='UTF-8', errors='ignore')))
-                cls._log.debug(
-                    "Deserialization Error: Unble to deserialize the "
-                    "following:\n{0}".format(serialized_str.decode(
-                        encoding='UTF-8', errors='ignore')))
-            except Exception as exception:
-                cls._log.exception(exception)
-                cls._log.debug(
-                    "Unable to log information regarding the "
-                    "deserialization exception")
-
-        return model_object
-
-    # Serialization Functions
-    def _obj_to_json(self):
-        raise NotImplementedError
-
-    def _obj_to_xml(self):
-        raise NotImplementedError
-
-    # Deserialization Functions
-    @classmethod
-    def _xml_to_obj(cls, serialized_str):
-        raise NotImplementedError
-
-    @classmethod
-    def _json_to_obj(cls, serialized_str):
-        raise NotImplementedError
-
-
-class AutoMarshallingListModel(list, AutoMarshallingModel):
-    """List-like AutoMarshallingModel used for some special cases"""
-
-    def __str__(self):
-        return list.__str__(self)
-
-
 class AutoMarshallingDictModel(dict, AutoMarshallingModel):
-    """Dict-like AutoMarshallingModel used for some special cases"""
-
-    def __str__(self):
-        return dict.__str__(self)
+    pass

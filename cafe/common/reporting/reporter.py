@@ -18,8 +18,9 @@ from cafe.common.reporting.subunit_report import SubunitReport
 
 class Reporter:
 
-    def __init__(self, result_parser, all_results):
-        self.result_parser = result_parser
+    def __init__(self, execution_time, datagen_time, all_results=None):
+        self.execution_time = execution_time
+        self.datagen_time = datagen_time
         self.all_results = all_results
 
     def generate_report(self, result_type, path=None):
@@ -34,5 +35,5 @@ class Reporter:
             report = SubunitReport()
 
         report.generate_report(
-            result_parser=self.result_parser, all_results=self.all_results,
-            path=path)
+            execution_time=self.execution_time, datagen_time=self.datagen_time,
+            all_results=self.all_results, path=path)

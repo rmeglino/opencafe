@@ -75,6 +75,7 @@ class UnittestRunner(object):
         self.config = EngineConfig()
         cclogging.init_root_log_handler()
         self.print_configuration(self.cl_args.testrepos)
+        self.datagen_start = time.time()
         self.cl_args.testrepos = import_repos(self.cl_args.testrepos)
 
         self.suites = SuiteBuilder(
@@ -102,16 +103,15 @@ class UnittestRunner(object):
         failfast = self.cl_args.failfast
         workers = int(not self.cl_args.parallel) or self.cl_args.workers
 
-        start = time.time()
-        count = 0
-        for tests, class_, dataset in self.suites:
+        # enumerate is used to count suites
+        for count, (tests, class_, dataset) in enumerate(self.suites):
             create_dd_class(class_, dataset)
             to_worker.put((tests, class_, dataset))
-            count += 1
 
         for _ in range(workers):
             to_worker.put(None)
 
+        start = time.time()
         # A second try catch is needed here because queues can cause locking
         # when they go out of scope, especially when termination signals used
         try:
@@ -120,11 +120,14 @@ class UnittestRunner(object):
                 worker_list.append(proc)
                 proc.start()
 
-            for _ in range(count):
+            for _ in range(count + 1):
                 results.append(self.log_result(from_worker.get()))
 
+            end = time.time()
             tests_run, errors, failures = self.compile_results(
-                time.time() - start, results)
+                run_time=end - start, datagen_time=start - self.datagen_start,
+                results=results)
+
         except KeyboardInterrupt:
             print_exception("Runner", "run", "Keyboard Interrupt, exiting...")
             os.killpg(0, 9)
@@ -180,37 +183,53 @@ class UnittestRunner(object):
         dic["result"].stream.seek(0)
         return dic
 
-    def compile_results(self, run_time, results):
+    def compile_results(self, run_time, datagen_time, results):
         """Summarizes results and writes results to file if --result used"""
         all_results = []
-        result_dict = {"tests": 0, "errors": 0, "failures": 0}
+        result_dict = {"tests": 0, "errors": 0, "failures": 0, "skipped": 0}
         for dic in results:
             result = dic["result"]
             all_results += dic.get("all_results")
             summary = dic.get("summary")
             for key in result_dict:
                 result_dict[key] += summary[key]
+
             if result.stream.buf.strip():
+                # this line can be replaced to add an extensible stdout/err log
                 sys.stderr.write("{0}\n\n".format(
                     result.stream.buf.strip()))
 
         if self.cl_args.result is not None:
-            reporter = Reporter(run_time, all_results)
+            reporter = Reporter(
+                execution_time=run_time,
+                datagen_time=datagen_time,
+                all_results=all_results)
             reporter.generate_report(
                 self.cl_args.result, self.cl_args.result_directory)
-        return self.print_results(run_time=run_time, **result_dict)
+        return self.print_results(
+            run_time=run_time, datagen_time=datagen_time, **result_dict)
 
-    def print_results(self, tests, errors, failures, run_time):
+    def print_results(self, tests, errors, failures, skipped,
+                      run_time, datagen_time):
         """Prints results summerized in compile_results messages"""
         print("{0}".format("-" * 70))
         print("Ran {0} test{1} in {2:.3f}s".format(
             tests, "s" * bool(tests - 1), run_time))
+        print("Generated datasets in {0:.3f}s".format(datagen_time))
+        print("Total runtime {0:.3f}s".format(run_time + datagen_time))
 
-        if failures or errors:
-            print("\nFAILED ({0}{1}{2})".format(
-                "failures={0}".format(failures) if failures else "",
-                ", " if failures and errors else "",
-                "errors={0}".format(errors) if errors else ""))
+        results = []
+        if failures:
+            results.append("failures={0}".format(failures))
+        if skipped:
+            results.append("skipped={0}".format(skipped))
+        if errors:
+            results.append("errors={0}".format(errors))
+
+        status = "FAILED" if failures or errors else "PASSED"
+        print("\n{} ".format(status), end="\n" * (not bool(results)))
+        if results:
+            print("({})".format(", ".join(results)))
         print("{0}\nDetailed logs: {1}\n{2}".format(
             "=" * 150, self.config.test_log_dir, "-" * 150))
         return tests, errors, failures

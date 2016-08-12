@@ -19,7 +19,8 @@ from cafe.common.reporting.base_report import BaseReport
 
 class JSONReport(BaseReport):
 
-    def generate_report(self, result_parser, all_results=None, path=None):
+    def generate_report(
+            self, execution_time, datagen_time, all_results=None, path=None):
         """ Generates a JSON report in the specified directory. """
 
         num_tests = len(all_results)
@@ -29,9 +30,9 @@ class JSONReport(BaseReport):
                         if result.failure_trace])
         skips = len([result.skipped_msg for result in all_results
                      if result.skipped_msg])
-        time = str(result_parser.execution_time)
-        if result_parser.datagen_time is not None:
-            datagen_time = str(result_parser.datagen_time)
+        time = str(execution_time)
+        if datagen_time is not None:
+            datagen_time = str(datagen_time)
 
         # Convert Result objects to dicts for processing
         individual_results = []
