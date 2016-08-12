@@ -1,11 +1,12 @@
 try:
-     import xmlrpclib
+    import xmlrpclib
 except ImportError:
-     import xmlrpc.client as xmlrpclib
+    import xmlrpc.client as xmlrpclib
 
 
 class PyPIClient(object):
     PLUGIN_HEADER = "cafe-plugin-"
+
     def __init__(self, url="https://pypi.python.org/pypi"):
         self.rpc_client = xmlrpclib.ServerProxy(url)
 

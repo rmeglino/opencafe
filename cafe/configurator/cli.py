@@ -22,6 +22,7 @@ def init(namespace):
     EngineConfigManager.build_engine_config()
     print("=================================")
 
+
 def add_plugins_subparser(subparsers):
     def install_plugin(namespace):
         print("=================================")

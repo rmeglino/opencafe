@@ -1,7 +1,6 @@
 import sphinx_rtd_theme
 import sys
 import os
-import shlex
 
 package_path = os.path.abspath("../../../opencafe")
 sys.path.append(package_path)
