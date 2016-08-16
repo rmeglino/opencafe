@@ -10,6 +10,10 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+import inspect
+from importlib import import_module
+
+
 from cafe.engine.base import BaseCafeClass
 
 
@@ -66,3 +70,61 @@ def behavior(*required_clients):
 
 class BaseBehavior(BaseCafeClass):
     pass
+
+
+class BaseIntegrationBehavior(object):
+    MAPPING = {}
+    func = None
+
+    def __init__(self, *args, **kwargs):
+        super(BaseIntegrationBehavior, self).__init__()
+        MAPPING = dict(self.MAPPING)
+        for k, v in self.MAPPING.items():
+            module, class_ = v.rsplit(".", 1)
+            MAPPING[k] = getattr(import_module(module), class_)
+        for obj in list(args) + kwargs.values():
+            for name, class_ in MAPPING.items():
+                if inspect.isclass(obj) and obj is class_:
+                    setattr(self, name, obj)
+                elif isinstance(obj, class_) and obj.__class__ is class_:
+                    setattr(self, name, obj)
+
+    def __call__(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
+
+
+def _get_classes(modules, types):
+    try:
+        iter(modules)
+    except:
+        modules = [modules]
+
+    try:
+        iter(types)
+    except:
+        types = (types,)
+
+    for module in modules:
+        for objname in dir(module):
+            obj = getattr(module, objname, None)
+            if (inspect.isclass(obj) and
+                    issubclass(obj, types) and obj not in types):
+                yield obj
+
+
+def integration_behavior(**kwargs):
+    def decorator(func):
+        return type(func.__name__, (BaseIntegrationBehavior,), {
+            "MAPPING": kwargs, "func": func})
+    return decorator
+
+
+def get_integration_behaviors(modules, names=None, *objs, **kwargs):
+    objs = list(objs) + kwargs.values()
+    behaviors = {}
+    for cls in _get_classes(modules, BaseIntegrationBehavior):
+        if names is None:
+            behaviors[cls.__name__] = cls(*objs)
+        elif names is not None and cls.__name__ in names:
+            behaviors[cls.__name__] = cls(*objs)
+    return type("IntegrationComposite", (object,), behaviors)
