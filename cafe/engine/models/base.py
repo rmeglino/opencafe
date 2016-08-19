@@ -249,8 +249,10 @@ class AutoMarshallingModel(BaseModel):
 
 
 class AutoMarshallingListModel(list, AutoMarshallingModel):
-    pass
+    def __str__(self):
+        return list.__str__(self)
 
 
 class AutoMarshallingDictModel(dict, AutoMarshallingModel):
-    pass
+    def __str__(self):
+        return dict.__str__(self)

@@ -159,12 +159,9 @@ class ConfigParserDataSource(DataSource):
         try:
             return self._data_source.get(self._section_name, item_name)
         except (configparser.NoOptionError, configparser.NoSectionError) as e:
-            if default is None:
-                self._log.error(str(e))
-            else:
-                msg = "{0}.  Using default value '{1}' instead".format(
-                    str(e), default)
-                self._log.warning(msg)
+            msg = "{0}.  Using default value '{1}' instead".format(
+                str(e), default)
+            self._log.warning(msg)
             return default
 
     def get_raw(self, item_name, default=None):
@@ -172,12 +169,9 @@ class ConfigParserDataSource(DataSource):
             return self._data_source.get(
                 self._section_name, item_name, raw=True)
         except (configparser.NoOptionError, configparser.NoSectionError) as e:
-            if default is None:
-                self._log.error(str(e))
-            else:
-                msg = "{0}.  Using default value '{1}' instead".format(
-                    str(e), default)
-                self._log.warning(msg)
+            msg = "{0}.  Using default value '{1}' instead".format(
+                str(e), default)
+            self._log.warning(msg)
             return default
 
     def get_boolean(self, item_name, default=None):
@@ -308,12 +302,16 @@ class BaseConfigSectionInterface(BaseCafeClass):
         self._section_name = section_name
 
     def get(self, item_name, default=None):
-        return self._override.get(item_name, None) or \
-            self._data_source.get(item_name, default)
+        value = self._override.get(item_name, None)
+        if value is None:
+            value = self._data_source.get(item_name, default)
+        return value
 
     def get_raw(self, item_name, default=None):
-        return self._override.get_raw(item_name, None) or \
-            self._data_source.get_raw(item_name, default)
+        value = self._override.get_raw(item_name, None)
+        if value is None:
+            value = self._data_source.get_raw(item_name, default)
+        return value
 
     def get_boolean(self, item_name, default=None):
         value = self._override.get_boolean(item_name, None)

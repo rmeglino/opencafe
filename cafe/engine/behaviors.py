@@ -72,7 +72,7 @@ class BaseBehavior(BaseCafeClass):
     pass
 
 
-class BaseIntegrationBehavior(object):
+class BaseIntegrationBehavior(BaseBehavior):
     MAPPING = {}
     func = None
 
@@ -81,9 +81,18 @@ class BaseIntegrationBehavior(object):
         MAPPING = dict(self.MAPPING)
         for k, v in self.MAPPING.items():
             module, class_ = v.rsplit(".", 1)
-            MAPPING[k] = getattr(import_module(module), class_)
-        for obj in list(args) + kwargs.values():
-            for name, class_ in MAPPING.items():
+            try:
+                MAPPING[k] = getattr(import_module(module), class_)
+            except ImportError as e:
+                self._log.error(
+                    "Failed import module: {0}, class: {1}, error: {2}".format(
+                        module, class_, e))
+        for name, class_ in MAPPING.items():
+            if not inspect.isclass(class_):
+                self._log.error("Failed to set {0}: in {1}".format(
+                    name, self.__name__))
+                continue
+            for obj in list(args) + kwargs.values():
                 if inspect.isclass(obj) and obj is class_:
                     setattr(self, name, obj)
                 elif isinstance(obj, class_) and obj.__class__ is class_:
@@ -115,7 +124,7 @@ def _get_classes(modules, types):
 def integration_behavior(**kwargs):
     def decorator(func):
         return type(func.__name__, (BaseIntegrationBehavior,), {
-            "MAPPING": kwargs, "func": func})
+            "MAPPING": kwargs, "func": func, "__name__": func.__name__})
     return decorator
 
 
