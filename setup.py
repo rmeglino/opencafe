@@ -46,7 +46,7 @@ for dirpath, directories, filenames in os.walk(dir_path):
 
 setup(
     name='decafe',
-    version='0.3.1',
+    version='0.3.2',
     description='The Common Automation Framework Engine',
     long_description='{0}'.format(open('README.rst').read()),
     author='CafeHub',
