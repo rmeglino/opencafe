@@ -104,10 +104,11 @@ class UnittestRunner(object):
         workers = int(not self.cl_args.parallel) or self.cl_args.workers
 
         # enumerate is used to count suites
-        count=0
-        for count, (tests, class_, dataset) in enumerate(self.suites):
+        count = 0
+        for tests, class_, dataset in self.suites:
             create_dd_class(class_, dataset)
             to_worker.put((tests, class_, dataset))
+            count += 1
 
         for _ in range(workers):
             to_worker.put(None)
@@ -121,7 +122,7 @@ class UnittestRunner(object):
                 worker_list.append(proc)
                 proc.start()
 
-            for _ in range(count + 1):
+            for _ in range(count):
                 results.append(self.log_result(from_worker.get()))
 
             end = time.time()
