@@ -42,20 +42,6 @@ class ConfigEnvironmentVariableError(Exception):
     pass
 
 
-# This is a decorator
-def expected_values(*values):
-    def decorator(fn):
-        def wrapped():
-            class UnexpectedConfigOptionValueError(Exception):
-                pass
-            value = fn()
-            if value not in values:
-                raise UnexpectedConfigOptionValueError(value)
-            return fn()
-        return wrapped
-    return decorator
-
-
 def _get_path_from_env(os_env_var):
     try:
         return os.environ[os_env_var]
@@ -70,7 +56,7 @@ def _get_path_from_env(os_env_var):
         raise exception
 
 # Standard format to for flat key/value data sources
-CONFIG_KEY = 'CAFE_{section_name}_{key}'
+CONFIG_KEY = 'CAFE_{section_name}__{key}'
 
 
 @add_metaclass(abc.ABCMeta)

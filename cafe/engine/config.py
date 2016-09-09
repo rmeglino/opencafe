@@ -24,7 +24,7 @@ class EngineDataSource(object):
         self._data_source.read(ENGINE_CONFIG_PATH)
 
     def get(self, item_name, default=None):
-        match = 'CAFE_{0}_'.format(self._section_name)
+        match = 'CAFE_{0}__'.format(self._section_name)
         env_vars = {k[len(match):]: v for k, v in os.environ.iteritems()
                     if k.startswith(match)}
         try:
