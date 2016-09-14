@@ -33,20 +33,9 @@ class Tox(TestCommand):
         errno = tox.cmdline(self.test_args)
         sys.exit(errno)
 
-# Package the plugin cache as package data
-plugins = []
-dir_path = os.path.join('cafe', 'plugins')
-for dirpath, directories, filenames in os.walk(dir_path):
-    dirpath = dirpath.lstrip('cafe{0}'.format(os.path.sep))
-    for f in filenames:
-        if f.endswith('.pyc'):
-            continue
-        target_file = os.path.join(dirpath, f)
-        plugins.append(target_file)
-
 setup(
     name='decafe',
-    version='0.3.4',
+    version='0.3.5',
     description='The Common Automation Framework Engine',
     long_description='{0}'.format(open('README.rst').read()),
     author='CafeHub',
@@ -54,7 +43,7 @@ setup(
     url='http://opencafe.readthedocs.org',
     install_requires=['six'],
     packages=find_packages(exclude=('tests*', 'docs')),
-    package_data={'cafe': plugins},
+    package_data={},
     license=open('LICENSE').read(),
     classifiers=(
         'Development Status :: 4 - Beta',
