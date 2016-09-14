@@ -70,7 +70,8 @@ class ConfiguratorCLI(object):
         subparser_init.set_defaults(func=init)
 
         namespace = parser.parse_args()
-        namespace.func(namespace)
+        if hasattr(namespace, "func"):
+            namespace.func(namespace)
         return namespace
 
 

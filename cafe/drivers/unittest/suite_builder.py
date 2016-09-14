@@ -13,7 +13,7 @@
 
 from __future__ import print_function
 
-from inspect import isclass, ismethod
+from inspect import isclass, isroutine
 import importlib
 import json
 import pkgutil
@@ -76,7 +76,7 @@ class SuiteBuilder(object):
     def _get_modules(self):
         """Gets modules given the repo paths passed in to init"""
         for repo in self.testrepos:
-            if repo.__package__:
+            if repo.__package__ and repo.__package__ != repo.__name__:
                 yield repo
                 continue
             prefix = "{0}.".format(repo.__name__)
@@ -110,7 +110,7 @@ class SuiteBuilder(object):
         test = getattr(class_, test_name)
         full_path = "{0}.{1}.{2}".format(
             class_.__module__, class_.__name__, test_name)
-        ret_val = ismethod(test) and self._check_tags(test)
+        ret_val = isroutine(test) and self._check_tags(test)
         regex_val = not self.regex_list
         for regex in self.regex_list:
             regex_val |= bool(regex.search(full_path))

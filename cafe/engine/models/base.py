@@ -23,9 +23,9 @@ def encode(val):
     if isinstance(val, six.binary_type):
         string = val
     elif isinstance(val, six.string_types):
-        string = val.encode("UTF-8")
+        string = val.encode("UTF-8", "ignore")
     else:
-        string = str(val).encode("UTF-8")
+        string = encode(val.__str__())
     return string
 
 
@@ -50,11 +50,9 @@ class BaseModel(BaseCafeClass):
                 continue
             key = six.b(key)
             string += b"%s = %s\n" % (key, encode(val))
-        try:
-            return string.decode("UTF-8")
-        except:
-            self._log.warning("Invalid UTF-8, binary returned from __str__")
-            return string
+        if six.PY3:
+            string = string.decode("UTF-8", "ignore")
+        return string
 
     def __repr__(self):
         return self.__str__()
@@ -77,13 +75,13 @@ class AutoMarshallingModel(BaseModel):
         return ET.tostring(element)
 
     @classmethod
-    def _json_to_obj(cls, string):
-        data = json.loads(string, strict=False)
+    def _json_to_obj(cls, data):
+        data = json.loads(data.decode("UTF-8", "ignore"), strict=False)
         return cls._dict_to_obj(data)
 
     @classmethod
-    def _xml_to_obj(cls, string):
-        data = cls._remove_namespaces(ET.fromstring(string))
+    def _xml_to_obj(cls, data):
+        data = cls._remove_namespaces(ET.fromstring(data))
         return cls._xml_ele_to_obj(data)
 
     def _obj_to_dict(self):
@@ -93,11 +91,11 @@ class AutoMarshallingModel(BaseModel):
         raise NotImplemented
 
     @classmethod
-    def _dict_to_obj(cls, string):
+    def _dict_to_obj(cls, data):
         raise NotImplemented
 
     @classmethod
-    def _xml_ele_to_obj(cls, string):
+    def _xml_ele_to_obj(cls, data):
         raise NotImplemented
 
     @classmethod
@@ -181,7 +179,12 @@ class AutoMarshallingModel(BaseModel):
     def deserialize(cls, serialized_str, format_type):
         try:
             deserialize_method = '_{0}_to_obj'.format(format_type)
-            model_object = getattr(cls, deserialize_method)(serialized_str)
+            try:
+                model_object = getattr(cls, deserialize_method)(
+                    serialized_str.decode("utf-8"))
+            except:
+                model_object = getattr(cls, deserialize_method)(
+                    serialized_str)
         except Exception as deserialization_exception:
             cls._log.exception(deserialization_exception)
             try:

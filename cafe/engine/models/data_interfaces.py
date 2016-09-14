@@ -15,7 +15,7 @@ import abc
 import json
 import os
 from six.moves import configparser
-from six import add_metaclass
+from six import add_metaclass, PY3
 
 from cafe.engine.base import BaseCafeClass
 from cafe.engine.config import EngineConfig
@@ -26,8 +26,11 @@ except:
     The mongo data-source is currently not being used. and needs to be
     abstracted out into a data-source plugin.
     """
-
     pass
+
+
+ConfigParser = (
+    configparser.ConfigParser if PY3 else configparser.SafeConfigParser)
 
 
 class ConfigDataException(Exception):
@@ -120,10 +123,10 @@ class ConfigParserDataSource(DataSource):
     def __init__(self, config_file_path, section_name):
         super(ConfigParserDataSource, self).__init__()
 
-        cafe_env_var = {key: value for key, value in os.environ.iteritems()
+        cafe_env_var = {key: value for key, value in os.environ.items()
                         if key.startswith('CAFE_')}
 
-        self._data_source = configparser.SafeConfigParser(
+        self._data_source = ConfigParser(
             defaults=cafe_env_var)
         self._section_name = section_name
 

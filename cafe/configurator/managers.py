@@ -11,18 +11,22 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from six import PY3
+from six.moves import configparser
+from subprocess import Popen, PIPE
 import compileall
+import getpass
 import os
 import platform
+import shutil
 import sys
 import textwrap
-import getpass
-import shutil
-from subprocess import Popen, PIPE
-from six.moves.configparser import SafeConfigParser
 
 import cafe
 from cafe.engine.clients.pypi import PyPIClient
+
+ConfigParser = (
+    configparser.ConfigParser if PY3 else configparser.SafeConfigParser)
 
 if not platform.system().lower() == 'windows':
     import pwd
@@ -203,7 +207,7 @@ class EngineConfigManager(object):
 
     @staticmethod
     def read_config_file(path):
-        config = SafeConfigParser()
+        config = ConfigParser()
         cfp = open(path, 'r')
         config.readfp(cfp)
         cfp.close()
@@ -254,7 +258,7 @@ class EngineConfigManager(object):
 
     @classmethod
     def generate_default_engine_config(cls):
-        config = SafeConfigParser()
+        config = ConfigParser()
         config.add_section('ENGINE')
         config.set('ENGINE', 'config_directory', OPENCAFE_SUB_DIRS.CONFIG_DIR)
         config.set('ENGINE', 'data_directory', OPENCAFE_SUB_DIRS.DATA_DIR)

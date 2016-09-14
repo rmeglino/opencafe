@@ -10,22 +10,26 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-import os
 from datetime import datetime
+from six import PY3
 from six.moves import configparser
+import os
 
 from cafe.configurator.managers import OPENCAFE_SUB_DIRS, ENGINE_CONFIG_PATH
+
+ConfigParser = (
+    configparser.ConfigParser if PY3 else configparser.SafeConfigParser)
 
 
 class EngineDataSource(object):
     def __init__(self, section_name):
-        self._data_source = configparser.SafeConfigParser()
+        self._data_source = ConfigParser()
         self._section_name = section_name
         self._data_source.read(ENGINE_CONFIG_PATH)
 
     def get(self, item_name, default=None):
         match = 'CAFE_{0}__'.format(self._section_name)
-        env_vars = {k[len(match):]: v for k, v in os.environ.iteritems()
+        env_vars = {k[len(match):]: v for k, v in os.environ.items()
                     if k.startswith(match)}
         try:
             return self._data_source.get(

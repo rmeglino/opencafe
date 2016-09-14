@@ -92,7 +92,7 @@ class BaseIntegrationBehavior(BaseBehavior):
                 self._log.error("Failed to set {0}: in {1}".format(
                     name, self.__name__))
                 continue
-            for obj in list(args) + kwargs.values():
+            for obj in list(args) + list(kwargs.values()):
                 if inspect.isclass(obj) and obj is class_:
                     setattr(self, name, obj)
                 elif isinstance(obj, class_) and obj.__class__ is class_:
@@ -129,7 +129,7 @@ def integration_behavior(**kwargs):
 
 
 def get_integration_behaviors(modules, names=None, *objs, **kwargs):
-    objs = list(objs) + kwargs.values()
+    objs = list(objs) + list(kwargs.values())
     behaviors = {}
     for cls in _get_classes(modules, BaseIntegrationBehavior):
         if names is None:

@@ -50,12 +50,15 @@ def _make_result(verbose, failfast):
     result = unittest.TextTestResult(stream, True, verbose)
     result.buffer = False
     result.failfast = failfast
+    del result._original_stdout
+    del result._original_stderr
     return result
 
 
 def import_repos(repo_list):
     """Imports the repos passed in on the command line"""
     repos = []
+    exception = None
     for repo_name in repo_list:
         try:
             repos.append(importlib.import_module(repo_name))
@@ -177,7 +180,7 @@ class UnittestRunner(object):
                 handler.emit(record)
 
         # this line can be replace to add an extensible stdout/err location
-        sys.stderr.write("{0}\n".format(dic["result"].stream.buf.strip()))
+        sys.stderr.write("{0}\n".format(dic["result"].stream.getvalue().strip()))
         sys.stderr.flush()
         dic["result"].stream.seek(0)
         dic["result"].stream.truncate()
@@ -196,10 +199,10 @@ class UnittestRunner(object):
             for key in result_dict:
                 result_dict[key] += summary[key]
 
-            if result.stream.buf.strip():
+            if result.stream.getvalue().strip():
                 # this line can be replaced to add an extensible stdout/err log
                 sys.stderr.write("{0}\n\n".format(
-                    result.stream.buf.strip()))
+                    result.stream.getvalue().strip()))
 
         if self.cl_args.result is not None:
             reporter = Reporter(

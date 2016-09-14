@@ -12,7 +12,8 @@ def print_configs():
     for path, dirs, files in os.walk(config_dir):
         for file_ in files:
             if file_.endswith(".config"):
-                print os.path.join(path, file_)[len(config_dir) + len(os.sep):]
+                print(
+                    os.path.join(path, file_)[len(config_dir) + len(os.sep):])
 
 
 def print_imports(string):
@@ -20,13 +21,13 @@ def print_imports(string):
     if len(import_paths) == 1:
         for _, module_name, _ in pkgutil.iter_modules():
             if module_name.startswith(import_paths[0]):
-                print module_name
+                print(module_name)
     else:
         try:
             base = importlib.import_module(import_paths[0])
             for _, name, _ in pkgutil.iter_modules(base.__path__):
                 if name.startswith(import_paths[1]):
-                    print "{0}.{1}".format(import_paths[0], name)
+                    print("{0}.{1}".format(import_paths[0], name))
         except:
             return
 
@@ -35,7 +36,7 @@ def print_products():
     try:
         base = importlib.import_module(ENGINE_CONFIG.default_test_repo)
         for _, name, _ in pkgutil.iter_modules(base.__path__):
-                print name
+                print(name)
     except:
         return
 
@@ -45,4 +46,5 @@ def print_configs_by_product(product):
     for path, dirs, files in os.walk(config_dir):
         for file_ in files:
             if file_.endswith(".config"):
-                print os.path.join(path, file_)[len(config_dir) + len(os.sep):]
+                print(
+                    os.path.join(path, file_)[len(config_dir) + len(os.sep):])
