@@ -32,6 +32,7 @@ import os
 import time
 import traceback
 import unittest
+
 from cafe.common.reporting import cclogging
 from cafe.common.reporting.reporter import Reporter
 from cafe.configurator.managers import ENGINE_CONFIG_PATH
@@ -180,7 +181,8 @@ class UnittestRunner(object):
                 handler.emit(record)
 
         # this line can be replace to add an extensible stdout/err location
-        sys.stderr.write("{0}\n".format(dic["result"].stream.getvalue().strip()))
+        sys.stderr.write(
+            "{0}\n".format(dic["result"].stream.getvalue().strip()))
         sys.stderr.flush()
         dic["result"].stream.seek(0)
         dic["result"].stream.truncate()
@@ -301,6 +303,9 @@ def entry_point():
     """Function setup.py links cafe-runner to"""
     try:
         runner = UnittestRunner()
+        root_log = logging.getLogger()
+        for handler in root_log.handlers:
+            handler.close()
         exit(runner.run())
     except KeyboardInterrupt:
         print_exception("Runner", "run", "Keyboard Interrupt, exiting...")

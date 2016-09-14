@@ -14,11 +14,13 @@
 from __future__ import print_function
 from traceback import print_exc
 from warnings import warn
+
 import argparse
+import logging
 import sys
 
 from cafe.common.reporting.cclogging import \
-    get_object_namespace, getLogger, setup_new_cchandler, log_info_block
+    get_object_namespace, setup_new_cchandler, log_info_block
 from cafe.common.reporting.metrics import \
     TestRunMetrics, TestResultTypes, PBStatisticsLog
 from cafe.engine.config import EngineConfig
@@ -27,22 +29,29 @@ from cafe.engine.config import EngineConfig
 class _FixtureLogger(object):
     """Provides logging for any test fixture"""
     def __init__(self, parent_object):
-        self.log = getLogger('')
-        self.log_handler = setup_new_cchandler(
-            get_object_namespace(parent_object))
+        self.log = logging.getLogger()
         self._is_logging = False
+        self.object_namespace = get_object_namespace(parent_object)
 
     def start(self):
         """Adds handler to log to start logging"""
         if self._is_logging is False:
-            self.log.addHandler(self.log_handler)
+            self.handler = setup_new_cchandler(self.object_namespace)
+            self.log.addHandler(self.handler)
             self._is_logging = True
 
     def stop(self):
         """Removes handler from log to stop logging"""
-        self.log_handler.close()
-        self.log.removeHandler(self.log_handler)
-        self._is_logging = False
+        if self._is_logging:
+            self.handler.close()
+            self.log.removeHandler(self.handler)
+            self._is_logging = False
+
+    def __exit__(self, exception_type, exception_value, traceback):
+        self.stop()
+
+    def __del__(self):
+        self.stop()
 
 
 class FixtureReporter(object):

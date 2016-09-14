@@ -14,6 +14,7 @@ from importlib import import_module
 from unittest import TestCase
 from warnings import warn, simplefilter
 import inspect
+import logging
 import re
 
 from cafe.common.reporting import cclogging
@@ -282,7 +283,6 @@ class memoized(object):
     def __call__(self, *args):
         log_name = "{0}.{1}".format(
             cclogging.get_object_namespace(args[0]), self.__name__)
-        self._start_logging(log_name)
 
         try:
             hash(args)
@@ -297,29 +297,26 @@ class memoized(object):
                 value = self.cache[args] = self.func(*args)
                 debug = "Data cached for future calls"
 
-        self.func._log.debug(debug)
-        self._stop_logging()
+        self._log_stuff(log_name, debug)
         return value
 
     def __repr__(self):
         """Return the function's docstring."""
         return self.func.__doc__
 
-    def _start_logging(self, log_file_name):
-        """Starts logging"""
-        setattr(self.func, '_log_handler', cclogging.setup_new_cchandler(
-            log_file_name))
-        setattr(self.func, '_log', cclogging.getLogger(''))
-        self.func._log.addHandler(self.func._log_handler)
+    def _log_stuff(self, log_file_name, string):
+        log_handler = cclogging.setup_new_cchandler(log_file_name)
+        log = logging.getLogger()
+        log.addHandler(log_handler)
         try:
             curframe = inspect.currentframe()
-            self.func._log.debug("{0} called from {1}".format(
+            log.debug("{0} called from {1}".format(
                 self.__name__, inspect.getouterframes(curframe, 2)[2][3]))
         except:
-            self.func._log.debug(
+            log.debug(
                 "Unable to log where {0} was called from".format(
                     self.__name__))
 
-    def _stop_logging(self):
-        """Stop logging"""
-        self.func._log.removeHandler(self.func._log_handler)
+        log.debug(string)
+        log_handler.close()
+        log.removeHandler(log_handler)

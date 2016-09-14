@@ -11,8 +11,9 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from cafe.common.reporting import cclogging
+from logging import getLogger
 
+from cafe.common.reporting.cclogging import get_object_namespace
 
 class ClassPropertyDescriptor(object):
     def __init__(self, fget):
@@ -34,4 +35,4 @@ def classproperty(func):
 class BaseCafeClass(object):
     @classproperty
     def _log(cls):
-        return cclogging.getLogger(cclogging.get_object_namespace(cls))
+        return getLogger(get_object_namespace(cls))
