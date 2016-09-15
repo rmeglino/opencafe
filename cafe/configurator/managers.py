@@ -81,7 +81,6 @@ class PlatformManager(object):
 
         real_user = os.getenv("SUDO_USER")
         effective_user = os.getenv("USER")
-
         if not cls.USING_WINDOWS and not cls.USING_VIRTUALENV:
             if effective_user == 'root' and real_user not in ['root', None]:
                 # Running 'sudo'.
@@ -90,7 +89,7 @@ class PlatformManager(object):
             return getpass.getuser()
 
         # Return the effective user, or root if all else fails
-        return effective_user or 'root'
+        return effective_user or getpass.getuser()
 
     @classmethod
     def get_user_home_path(cls):

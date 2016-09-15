@@ -55,7 +55,8 @@ class JSONReport(BaseReport):
             'errors': errors,
             'skips': skips,
             'time': time,
-            'results': sorted(individual_results)
+            'results': sorted(
+                individual_results, key=lambda k: k['test_method_name'])
         }
         # Add new metrics to result summary if available
         if datagen_time is not None:

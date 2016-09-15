@@ -1,8 +1,13 @@
+import os
 import unittest
 import mock
 from uuid import uuid4
 import logging
 from cafe.common.reporting.cclogging import getLogger as CC_getLogger
+
+os.environ["CAFE_ENGINE__logging_verbosity"] = "VERBOSE"
+os.environ["CAFE_ENGINE__root_log_dir"] = ""
+os.environ["CAFE_ENGINE__test_log_dir"] = ""
 
 mock_dict = dict(
     CAFE_TEST_LOG_PATH='/tmp',
@@ -78,22 +83,22 @@ class Normal_getLogger_Tests(unittest.TestCase, BaseLoggerTestMixin):
     def test_new_logger_unconfigured_env_0_handlers(self):
         global get_unconfigured_logger
         logger = self.call_getLogger(get_unconfigured_logger, 1)
-        self.assertHandlerCount(logger, 0)
+        self.assertHandlerCount(logger, 1)
 
     def test_new_logger_standard_env_0_handlers(self):
         global get_standard_logger
         logger = self.call_getLogger(get_standard_logger, 1)
-        self.assertHandlerCount(logger, 0)
+        self.assertHandlerCount(logger, 1)
 
     def test_existing_logger_standard_env_0_handlers_after_2_calls(self):
         global get_standard_logger
         logger = self.call_getLogger(get_standard_logger, 2)
-        self.assertHandlerCount(logger, 0)
+        self.assertHandlerCount(logger, 1)
 
     def test_existing_logger_unconfigured_env_0_handlers_after_2_calls(self):
         global get_unconfigured_logger
         logger = self.call_getLogger(get_unconfigured_logger, 2)
-        self.assertHandlerCount(logger, 0)
+        self.assertHandlerCount(logger, 1)
 
 
 class Root_getLogger_Tests(unittest.TestCase, BaseLoggerTestMixin):
@@ -119,12 +124,12 @@ class Root_getLogger_Tests(unittest.TestCase, BaseLoggerTestMixin):
     def test_new_logger_unconfigured_env_0_handlers(self):
         global get_unconfigured_logger
         logger = self.call_getLogger(get_unconfigured_logger, 1)
-        self.assertHandlerCount(logger, 0)
+        self.assertHandlerCount(logger, 1)
 
     def test_new_logger_standard_env_0_handlers(self):
         global get_standard_logger
         logger = self.call_getLogger(get_standard_logger, 1)
-        self.assertHandlerCount(logger, 0)
+        self.assertHandlerCount(logger, 1)
 
     def test_initialized_root_logger_unconfigured_env_1_handlers_after_2_calls(
             self):

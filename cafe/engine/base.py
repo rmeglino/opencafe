@@ -15,6 +15,7 @@ from logging import getLogger
 
 from cafe.common.reporting.cclogging import get_object_namespace
 
+
 class ClassPropertyDescriptor(object):
     def __init__(self, fget):
         self.fget = fget

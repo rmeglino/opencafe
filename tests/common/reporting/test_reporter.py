@@ -64,11 +64,11 @@ class ReportingTests(unittest.TestCase):
             'failures': [(FakeTests('test_report_fail'), self.failure_trace)]}
 
         self.result_parser = SummarizeResults(
-            tests=test_suite, result_dict=result,
-            execution_time=1.23, datagen_time=4.56)
+            tests=test_suite, result_dict=result)
         self.all_results = self.result_parser.gather_results()
         self.reporter = Reporter(
-            result_parser=self.result_parser, all_results=self.all_results,)
+            execution_time=1.23, datagen_time=4.56,
+            all_results=self.all_results,)
 
         self.results_dir = os.getcwd() + os.path.sep + 'test-reporting-results'
         if not os.path.exists(self.results_dir):

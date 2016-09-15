@@ -34,3 +34,4 @@ test-reporting-results*
 
 # pyenv versions
 .python-version
+.eggs
