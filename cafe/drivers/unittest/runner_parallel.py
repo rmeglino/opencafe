@@ -73,6 +73,7 @@ def import_repos(repo_list):
 
 class UnittestRunner(object):
     """OpenCafe UnittestRunner"""
+
     def __init__(self):
         self.print_mug()
         self.cl_args = ArgumentParser().parse_args()
@@ -244,6 +245,7 @@ class UnittestRunner(object):
 
 class ParallelRecordHandler(logging.Handler):
     """Stores logs instead of logging them"""
+
     def __init__(self):
         super(ParallelRecordHandler, self).__init__()
         self._records = []
@@ -255,6 +257,7 @@ class ParallelRecordHandler(logging.Handler):
 
 class Consumer(Process):
     """This class runs as a process and does the test running"""
+
     def __init__(self, to_worker, from_worker, verbose, failfast):
         Process.__init__(self)
         self.to_worker = to_worker
@@ -287,7 +290,8 @@ class Consumer(Process):
             for record in handler._records:
                 if record.exc_info:
                     record.msg = "{0}\n{1}".format(
-                        record.msg, traceback.format_exc(record.exc_info))
+                        record.msg, traceback.format_exception(
+                            *record.exc_info))
                 record.exc_info = None
             result._previousTestClass = None
             result_parser = SummarizeResults(vars(result), suite)

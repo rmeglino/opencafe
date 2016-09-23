@@ -45,7 +45,7 @@ setup(
     packages=find_packages(exclude=('tests*', 'docs')),
     package_data={},
     license=open('LICENSE').read(),
-    classifiers=(
+    classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'Natural Language :: English',
@@ -53,7 +53,7 @@ setup(
         'Operating System :: POSIX :: Linux',
         'Programming Language :: Python',
         'Programming Language :: Python :: 2.7',
-    ),
+    ],
     entry_points={
         'console_scripts':
         ['cafe-runner = cafe.drivers.unittest.runner:entry_point',
