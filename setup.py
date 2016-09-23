@@ -35,7 +35,7 @@ class Tox(TestCommand):
 
 setup(
     name='decafe',
-    version='0.3.7',
+    version='0.3.8',
     description='The Common Automation Framework Engine',
     long_description='{0}'.format(open('README.rst').read()),
     author='CafeHub',
