@@ -33,6 +33,7 @@ class Tox(TestCommand):
         errno = tox.cmdline(self.test_args)
         sys.exit(errno)
 
+
 setup(
     name='decafe',
     version='0.3.8',
@@ -41,7 +42,7 @@ setup(
     author='CafeHub',
     author_email='cloud-cafe@lists.rackspace.com',
     url='http://opencafe.readthedocs.org',
-    install_requires=['six'],
+    install_requires=['six', 'unittest2', 'futures'],
     packages=find_packages(exclude=('tests*', 'docs')),
     package_data={},
     license=open('LICENSE').read(),
@@ -57,7 +58,6 @@ setup(
     entry_points={
         'console_scripts':
         ['cafe-runner = cafe.drivers.unittest.runner:entry_point',
-         'cafe-parallel = cafe.drivers.unittest.runner_parallel:entry_point',
          'behave-runner = cafe.drivers.behave.runner:entry_point',
          'vows-runner = cafe.drivers.pyvows.runner:entry_point',
          'specter-runner = cafe.drivers.specter.runner:entry_point',

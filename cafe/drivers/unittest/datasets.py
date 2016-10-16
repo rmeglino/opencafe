@@ -39,7 +39,42 @@ class _Dataset(object):
         return "<name:{0}, data:{1}>".format(self.name, self.data)
 
 
+class DatasetListType(type):
+    def __new__(cls, name, parents, vars_):
+        new_class = super(DatasetListType, cls).__new__(
+            cls, name, parents, vars_)
+        if (name == "DatasetList" and
+                new_class.__module__ == 'cafe.drivers.unittest.datasets'):
+            return new_class
+        ret_obj = RealDSLClass(new_class)
+        ret_obj.__name__ = name
+        return ret_obj
+
+
+class RealDSLClass(object):
+    def __init__(self, cls):
+        self.cls = cls
+
+    def __call__(self, *args, **kwargs):
+        return DSLInstance(self.cls, args, kwargs)
+
+
+class DSLInstance(object):
+    def __init__(self, cls, args, kwargs):
+        self.cls = cls
+        self.args = args
+        self.kwargs = kwargs
+        self.datasets = None
+
+    def __iter__(self):
+        if self.datasets is None:
+            self.datasets = self.cls(*self.args, **self.kwargs)
+        for dataset in self.datasets:
+            yield dataset
+
+
 class DatasetList(list):
+    __metaclass__ = DatasetListType
     """Specialized list-like object that holds Dataset objects"""
 
     def append(self, dataset):
@@ -106,6 +141,13 @@ class DatasetList(list):
         if string[0] in digits:
             string = "{0}{1}".format(new_char, string[1:])
         return string
+
+    def __call__(self):
+        """Support for runtime datageneration"""
+        self._generate_dataset()
+
+    def _generate_dataset(self):
+        raise NotImplemented
 
 
 class DatasetListCombiner(DatasetList):

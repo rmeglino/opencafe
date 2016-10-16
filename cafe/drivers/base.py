@@ -12,7 +12,7 @@
 # under the License.
 
 from __future__ import print_function
-from traceback import print_exc
+from traceback import format_exc
 from warnings import warn
 
 import argparse
@@ -201,25 +201,44 @@ def print_mug(name, brewing_from):
     print(border)
 
 
+def get_exception_string(file_=None, method=None, value=None, exception=None):
+    string = ""
+    string += "{0}\n".format("=" * 70)
+    if file_:
+        string += "{0}: ".format(file_)
+    if method:
+        string += "{0}: ".format(method)
+    if value:
+        string += "{0}: ".format(value)
+    if exception:
+        string += "{0}:".format(exception)
+    string += "\n{0}\n".format("-" * 70)
+    if exception is not None:
+        string += format_exc()
+    string += "\n"
+    return string
+
+
 def print_exception(file_=None, method=None, value=None, exception=None):
     """
         Prints exceptions in a standard format to stderr.
     """
-    print("{0}".format("=" * 70), file=sys.stderr)
-    if file_:
-        print("{0}:".format(file_), file=sys.stderr, end=" ")
-    if method:
-        print("{0}:".format(method), file=sys.stderr, end=" ")
-    if value:
-        print("{0}:".format(value), file=sys.stderr, end=" ")
-    if exception:
-        print("{0}:".format(exception), file=sys.stderr, end=" ")
-    print("\n{0}".format("-" * 70), file=sys.stderr)
-    if exception is not None:
-        print_exc(file=sys.stderr)
-    print(file=sys.stderr)
+    print(get_exception_string(
+        file_, method, value, exception), file=sys.stderr)
 
 
 def get_error(exception=None):
     """Gets errno from exception or returns one"""
     return getattr(exception, "errno", 1)
+
+
+class ErrorMixin(object):
+    def error(
+        self, file_=None, method=None, value=None, exception=None,
+            exit_on_error=False):
+        exit_on_error |= getattr(self, "_exit_on_error", False)
+        string = get_exception_string(file_, method, value, exception)
+        self._log.error(string)
+        print(string, file=sys.stderr)
+        if exit_on_error:
+            sys.exit(get_error(exception))

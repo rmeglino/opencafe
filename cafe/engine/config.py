@@ -43,6 +43,7 @@ class EngineConfig(object):
     TIME = datetime.now()
 
     def __init__(self):
+        self.config_path = ENGINE_CONFIG_PATH
         self._data_source = EngineDataSource(self.SECTION_NAME)
         self._format_vars = {
             "test_config": self._get("test_config"),

@@ -16,161 +16,40 @@
 @note: Corresponds DIRECTLY TO A unittest.TestCase
 @see: http://docs.python.org/library/unittest.html#unittest.TestCase
 """
-import os
-import re
-import six
-import sys
-import unittest
+import unittest2
 
-from cafe.drivers.base import FixtureReporter
+from cafe.engine.base import BaseCafeClass, deprecate, classproperty
+from cafe.drivers.unittest.result import CafeTextTestResult
 
 
-class BaseTestFixture(unittest.TestCase):
-    """
-    @summary: This should be used as the base class for any unittest tests,
-              meant to be used instead of unittest.TestCase.
-    @see: http://docs.python.org/library/unittest.html#unittest.TestCase
-    """
+class BaseTestFixture(unittest2.TestCase, BaseCafeClass):
+    @classproperty
+    def _class_cleanup_tasks(cls):
+        if not hasattr(cls, "_class_cleanup_tasks"):
+            cls.___class_cleanup_tasks = []
+        return cls.___class_cleanup_tasks
 
-    __test__ = True
-
-    def shortDescription(self):
-        """
-        @summary: Returns a formatted description of the test
-        """
-        short_desc = None
-
-        if os.environ.get("VERBOSE", None) == "true" and self._testMethodDoc:
-            temp = self._testMethodDoc.strip("\n")
-            short_desc = re.sub(r"[ ]{2,}", "", temp).strip("\n")
-        return short_desc
-
-    def logDescription(self):
-        """
-        @summary: Returns a formatted description from the _testMethodDoc
-        """
-        log_desc = None
-        if self._testMethodDoc:
-            log_desc = "\n{0}".format(
-                re.sub(r"[ ]{2,}", "", self._testMethodDoc).strip("\n"))
-        return log_desc
+    def defaultTestResult(self):
+        return CafeTextTestResult()
 
     @classmethod
     def assertClassSetupFailure(cls, message):
-        """
-        @summary: Use this if you need to fail from a Test Fixture's
-                  setUpClass() method
-        """
-        cls.fixture_log.error("FATAL: %s:%s", cls.__name__, message)
         raise AssertionError("FATAL: %s:%s" % (cls.__name__, message))
 
     @classmethod
     def assertClassTeardownFailure(cls, message):
-        """
-        @summary: Use this if you need to fail from a Test Fixture's
-                  tearUpClass() method
-        """
-        cls.fixture_log.error("FATAL: %s:%s", cls.__name__, message)
         raise AssertionError("FATAL: %s:%s" % (cls.__name__, message))
 
     @classmethod
     def setUpClass(cls):
-        """@summary: Adds logging/reporting to Unittest setUpClass"""
         super(BaseTestFixture, cls).setUpClass()
-        cls._reporter = FixtureReporter(cls)
-        cls.fixture_log = cls._reporter.logger.log
-        cls._reporter.start()
-        cls._class_cleanup_tasks = []
-
-    @classmethod
-    def tearDownClass(cls):
-        """@summary: Adds stop reporting to Unittest setUpClass"""
-        cls._reporter.stop()
-        # Call super teardown after to avoid tearing down the class before we
-        # can run our own tear down stuff.
-        super(BaseTestFixture, cls).tearDownClass()
-
-    def setUp(self):
-        """@summary: Logs test metrics"""
-        self.shortDescription()
-        self._reporter.start_test_metrics(
-            self.__class__.__name__, self._testMethodName,
-            self.logDescription())
-        self._duration = 0.00
-        super(BaseTestFixture, self).setUp()
-
-    def tearDown(self):
-        """
-        @todo: This MUST be upgraded this from resultForDoCleanups into a
-               better pattern or working with the result object directly.
-               This is related to the todo in L{TestRunMetrics}
-        """
-        if sys.version_info < (3, 4):
-            if six.PY2:
-                report = self._resultForDoCleanups
-            else:
-                report = self._outcomeForDoCleanups
-
-            if any(r for r in report.failures
-                   if self._test_name_matches_result(self._testMethodName, r)):
-                self._reporter.stop_test_metrics(self._testMethodName,
-                                                 'Failed')
-            elif any(r for r in report.errors
-                     if self._test_name_matches_result(self._testMethodName,
-                                                       r)):
-                self._reporter.stop_test_metrics(self._testMethodName,
-                                                 'ERRORED')
-            else:
-                self._reporter.stop_test_metrics(self._testMethodName,
-                                                 'Passed')
-            try:
-                self._duration = \
-                    self._reporter.test_metrics.timer.get_elapsed_time()
-            except AttributeError:
-                # If the reporter was not appropriately called at test start
-                # or end tests will fail unless we catch this. This is common
-                # in the case where test writers did not appropriately call
-                # 'super' in the setUp or setUpClass of their fixture or
-                # test class.
-                self._duration = float('nan')
-        else:
-            for method, _ in self._outcome.errors:
-                if self._test_name_matches_result(self._testMethodName,
-                                                  method):
-                    self._reporter.stop_test_metrics(self._testMethodName,
-                                                     'Failed')
-                else:
-                    self._reporter.stop_test_metrics(self._testMethodName,
-                                                     'Passed')
-                self._duration = \
-                    self._reporter.test_metrics.timer.get_elapsed_time()
-
-        # Continue inherited tearDown()
-        super(BaseTestFixture, self).tearDown()
-
-    @staticmethod
-    def _test_name_matches_result(name, test_result):
-        """@summary: Checks if a test result matches a specific test name."""
-        if sys.version_info < (3, 4):
-            # Try to get the result portion of the tuple
-            try:
-                result = test_result[0]
-            except IndexError:
-                return False
-        else:
-            result = test_result
-
-        # Verify the object has the correct property
-        if hasattr(result, '_testMethodName'):
-            return result._testMethodName == name
-        else:
-            return False
+        cls.fixture_log = deprecate(cls._log, "_log", "fixture_log")
 
     @classmethod
     def _do_class_cleanup_tasks(cls):
         """@summary: Runs class cleanup tasks added during testing"""
         for func, args, kwargs in reversed(cls._class_cleanup_tasks):
-            cls.fixture_log.debug(
+            cls._log.debug(
                 "Running class cleanup task: %s(%s, %s)",
                 func.__name__,
                 ", ".join([str(arg) for arg in args]),
@@ -181,8 +60,8 @@ class BaseTestFixture(unittest.TestCase):
             except Exception as exception:
                 # Pretty prints method signature in the following format:
                 # "classTearDown failure: Unable to execute FnName(a, b, c=42)"
-                cls.fixture_log.exception(exception)
-                cls.fixture_log.error(
+                cls._log.exception(exception)
+                cls._log.error(
                     "classTearDown failure: Exception occured while trying to"
                     " execute class teardown task: %s(%s, %s)",
                     func.__name__,
@@ -192,26 +71,71 @@ class BaseTestFixture(unittest.TestCase):
 
     @classmethod
     def addClassCleanup(cls, function, *args, **kwargs):
-        """@summary: Named to match unittest's addCleanup.
-        ClassCleanup tasks run if setUpClass fails, or after tearDownClass.
-        (They don't depend on tearDownClass running)
-        """
-
         cls._class_cleanup_tasks.append((function, args or [], kwargs or {}))
 
+    def run(self, result=None):
+        orig_result = result
+        if result is None:
+            result = self.defaultTestResult()
+            startTestRun = getattr(result, 'startTestRun', None)
+            if startTestRun is not None:
+                startTestRun()
 
-class BaseBurnInTestFixture(BaseTestFixture):
-    """
-    @summary: Base test fixture that allows for Burn-In tests
-    """
-    @classmethod
-    def setUpClass(cls):
-        """@summary: inits burning testing variables"""
-        super(BaseBurnInTestFixture, cls).setUpClass()
-        cls.test_list = []
-        cls.iterations = 0
+        result.startTest(self)
 
-    @classmethod
-    def addTest(cls, test_case):
-        """@summary: Adds a test case"""
-        cls.test_list.append(test_case)
+        testMethod = getattr(self, self._testMethodName)
+        if (getattr(self.__class__, "__unittest_skip__", False) or
+                getattr(testMethod, "__unittest_skip__", False)):
+            # If the class or method was skipped.
+            try:
+                skip_why = (
+                    getattr(self.__class__, '__unittest_skip_why__', '') or
+                    getattr(testMethod, '__unittest_skip_why__', ''))
+                self._addSkip(result, self, skip_why)
+            finally:
+                result.stopTest(self)
+            return result
+        expecting_failure = getattr(testMethod,
+                                    "__unittest_expecting_failure__", False)
+        outcome = unittest2.case._Outcome(result)
+        try:
+            self._outcome = outcome
+
+            with outcome.testPartExecutor(self):
+                self.setUp()
+            if outcome.success:
+                outcome.expecting_failure = expecting_failure
+                with outcome.testPartExecutor(self, isTest=True):
+                    testMethod()
+                outcome.expecting_failure = False
+                with outcome.testPartExecutor(self):
+                    self.tearDown()
+
+            self.doCleanups()
+            for test, reason in outcome.skipped:
+                self._addSkip(result, test, reason)
+            self._feedErrorsToResult(result, outcome.errors)
+            if outcome.success:
+                if expecting_failure:
+                    if outcome.expectedFailure:
+                        self._addExpectedFailure(
+                            result, outcome.expectedFailure)
+                    else:
+                        self._addUnexpectedSuccess(result)
+                else:
+                    result.addSuccess(self)
+            return result
+        finally:
+            result.stopTest(self)
+            if orig_result is None:
+                stopTestRun = getattr(result, 'stopTestRun', None)
+                if stopTestRun is not None:
+                    stopTestRun()
+
+            # explicitly break reference cycles:
+            # outcome.errors -> frame -> outcome -> outcome.errors
+            del outcome.errors[:]
+            outcome.expectedFailure = None
+
+            # clear the outcome, no more needed
+            self._outcome = None

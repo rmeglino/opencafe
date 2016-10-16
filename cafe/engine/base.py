@@ -1,3 +1,4 @@
+
 # Copyright 2015 Rackspace
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -12,6 +13,7 @@
 # under the License.
 
 from logging import getLogger
+import warnings
 
 from cafe.common.reporting.cclogging import get_object_namespace
 
@@ -25,6 +27,9 @@ class ClassPropertyDescriptor(object):
             klass = type(obj)
         return self.fget.__get__(obj, klass)()
 
+    def __call__(self, *args, **kwargs):
+        return self.__get__(self)(*args, **kwargs)
+
 
 def classproperty(func):
     """creates a function that acts as a classmethod and an instance method"""
@@ -37,3 +42,22 @@ class BaseCafeClass(object):
     @classproperty
     def _log(cls):
         return getLogger(get_object_namespace(cls))
+
+
+def deprecate(new, new_name, old_name):
+    """This deprecate function can be used to deprecate functions,
+       class variables, class methods, instance variables and instance methods
+       class Test(object):
+           def __init__(self):
+               self.old_method_name = deprecate(
+                   self.new_method, "new_method", "old_method_name")
+
+    """
+    @classproperty
+    def deprecated(*args, **kwargs):
+        warnings.warn(
+            "Please use {0} instead: {1} pending deprecation.".format(
+                new_name, old_name),
+            PendingDeprecationWarning, 2)
+        return new
+    return deprecated

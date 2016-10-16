@@ -14,9 +14,6 @@
 from __future__ import print_function
 
 import argparse
-import errno
-import importlib
-import json
 import os
 import re
 import sys
@@ -63,7 +60,6 @@ class ConfigAction(argparse.Action):
         if not os.path.exists(path):
             parser.error(
                 "ConfigAction: Config does not exist: {0}".format(path))
-            exit(errno.ENOENT)
         env_name = CONFIG_KEY.format(section_name="ENGINE", key="test_config")
         os.environ[env_name] = value
         setattr(namespace, self.dest, value)
@@ -78,54 +74,18 @@ class DataDirectoryAction(argparse.Action):
             parser.error(
                 "DataDirectoryAction: Data directory does not exist: "
                 "{0}".format(value))
-            exit(errno.ENOENT)
         setattr(namespace, self.dest, value)
 
 
 class InputFileAction(argparse.Action):
     """
-        Custom action that reads in a file and uses the lines for a test order.
+        Custom action that checks if file exists.
     """
-    @staticmethod
-    def parse_line(line):
-        """Parses line of file input """
-        test = test_class = test_module = dd_args = dd_class = dd_module = None
-        test, temp = [word.strip() for word in line.split("(")]
-        temp = temp.strip(")").split(":", 2)
-        test_module, test_class = [w.strip() for w in temp[0].rsplit(".", 1)]
-        if len(temp) > 1:
-            dd_module, dd_class = [w.strip() for w in temp[1].rsplit(".", 1)]
-        if len(temp) > 2:
-            json.loads(temp[2].strip() or None)
-            dd_args = temp[2].strip() or None
-        test = test or None
-        return (test_module, test_class, dd_module, dd_class, dd_args), test
-
     def __call__(self, parser, namespace, value, option_string=None):
-        dic = {}
-        try:
-            lines = open(value).readlines()
-            for line in lines:
-                if not line.strip():
-                    continue
-                key, test = self.parse_line(line)
-                dic[key] = dic.get(key, [])
-                if test is not None:
-                    dic[key].append(test)
-        except IndexError as exception:
+        if not os.path.exists(value):
             parser.error(
-                "InputFileAction: Parsing of {0} failed: {1}".format(
-                    line, exception))
-        except IOError as exception:
-            parser.error(
-                "InputFileAction: File open failed: {0}".format(exception))
-            exit(get_error(exception))
-        except (TypeError, ValueError) as exception:
-            parser.error(
-                "InputFileAction: Failed to parse line: {0}: Line: {1}".format(
-                    exception, line.strip()))
-            exit(get_error(exception))
-        setattr(namespace, self.dest, dic)
+                "InputFileAction: File does not exist: {0}".format(value))
+        setattr(namespace, self.dest, value)
 
 
 class ListAction(argparse.Action):
@@ -133,26 +93,8 @@ class ListAction(argparse.Action):
         Custom action that lists either configs or tests.
     """
     def __call__(self, parser, namespace, values, option_string=None):
-        if namespace.testrepos:
-            print("\n<[TEST REPO]>\n")
-            for repo in namespace.testrepos:
-                try:
-                    path = importlib.import_module(
-                        repo.split(".")[0]).__path__[0]
-                except Exception as exception:
-                    print_exception(
-                        "Argument Parser", "ListAction", repo, exception)
-                    continue
-                path = os.path.join(path, *repo.split(".")[1:])
-                print(path)
-                if os.path.exists("{0}.py".format(path)):
-                    tree("{0}.py".format(path))
-                else:
-                    tree(path)
-                print()
-        else:
-            print("\n<[CONFIGS]>\n")
-            tree(ENGINE_CONFIG.config_directory)
+        print("\n<[CONFIGS]>\n")
+        tree(ENGINE_CONFIG.config_directory)
         exit(0)
 
 
@@ -203,14 +145,11 @@ class ArgumentParser(argparse.ArgumentParser):
     def __init__(self):
         desc = "Open Common Automation Framework Engine"
         usage_string = """
-            cafe-runner <config> <testrepos>... [--failfast]
-                [--dry-run] [--data-directory=DATA_DIRECTORY]
-                [--regex-list=REGEX...] [--file] [--parallel=(class|test)]
-                [--result=(json|xml)] [--result-directory=RESULT_DIRECTORY]
-                [--tags=TAG...] [--verbose=VERBOSE] [--exit-on-error]
-                [--workers=NUM]
-            cafe-runner <config> <testrepo>... --list
-            cafe-runner --list
+            cafe-runner <config> <testrepos>... [--dry-run]
+                [--data-directory=DATA_DIRECTORY] [--result=(json|xml)]
+                [--regex-list=REGEX...] [--file] [--tags=TAG...]
+                [--result-directory=RESULT_DIRECTORY] [--verbose=VERBOSE]
+                [--workers=NUM] [--threads=NUM]
             cafe-runner --help
             """
 
@@ -243,28 +182,6 @@ class ArgumentParser(argparse.ArgumentParser):
                  " generators.")
 
         self.add_argument(
-            "--exit-on-error",
-            action="store_true",
-            help="Exit on module import error")
-
-        self.add_argument(
-            "--failfast", "-f",
-            action="store_true",
-            help="fail fast")
-
-        self.add_argument(
-            "--list", "-l",
-            action=ListAction,
-            nargs=0,
-            help="Lists configs if no repo is specified otherwise lists tests"
-                 " for all the specified repos.")
-
-        self.add_argument(
-            "--data-directory", "-D",
-            action=DataDirectoryAction,
-            help="Data directory override")
-
-        self.add_argument(
             "--regex-list", "-d",
             action=RegexAction,
             nargs="+",
@@ -278,15 +195,12 @@ class ArgumentParser(argparse.ArgumentParser):
         self.add_argument(
             "--file", "-F",
             metavar="INPUT_FILE",
-            default={},
-            action=InputFileAction,
+            type=argparse.FileType("r"),
+            nargs="?",
             help="Runs only tests listed in file."
-                 "  Can be created by copying --dry-run response")
-
-        self.add_argument(
-            "--parallel", "-P",
-            choices=["class", "test"],
-            help="Runs test in parallel by class grouping or test")
+                 "  Can be created by copying --dry-run response\n Format: "
+                 "[test_name] (package[.module[.TestCase]][:package.module."
+                 "DataGenClass[:json kwargs or args for DataGenClass]]))")
 
         self.add_argument(
             "--result", "-R",
@@ -316,14 +230,21 @@ class ArgumentParser(argparse.ArgumentParser):
             choices=[1, 2, 3],
             default=2,
             type=int,
-            help="Set unittest output verbosity")
+            help="Set unittest stdout verbosity")
 
         self.add_argument(
             "--workers", "-w",
             nargs="?",
-            default=10,
+            default=1,
             type=int,
-            help="Set number of workers for --parallel option")
+            help="Set number of module subprocceses")
+
+        self.add_argument(
+            "--threads", "-T",
+            nargs="?",
+            default=1,
+            type=int,
+            help="Set number of class threads")
 
     def error(self, message):
         self.print_usage(sys.stderr)

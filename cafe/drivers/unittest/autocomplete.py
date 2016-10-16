@@ -30,21 +30,3 @@ def print_imports(string):
                     print("{0}.{1}".format(import_paths[0], name))
         except:
             return
-
-
-def print_products():
-    try:
-        base = importlib.import_module(ENGINE_CONFIG.default_test_repo)
-        for _, name, _ in pkgutil.iter_modules(base.__path__):
-                print(name)
-    except:
-        return
-
-
-def print_configs_by_product(product):
-    config_dir = os.path.join(ENGINE_CONFIG.config_directory, product)
-    for path, dirs, files in os.walk(config_dir):
-        for file_ in files:
-            if file_.endswith(".config"):
-                print(
-                    os.path.join(path, file_)[len(config_dir) + len(os.sep):])
