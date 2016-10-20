@@ -16,7 +16,7 @@ import logging
 import re
 
 from cafe.common.reporting import cclogging
-from cafe.drivers.unittest.datasets import DatasetList, DSLInstance
+from cafe.drivers.unittest.datasets import DatasetList, _DSLInstance
 
 DATA_DRIVEN_ATTR = "__data_driven_test_data__"
 DATA_DRIVEN_PREFIX = "ddtest_"
@@ -29,37 +29,30 @@ class EMPTY_DATASET_ACTIONS(object):
     RAISE = "NONE"
 
 
-def _add_tags(func, tags):
-    current_tags = getattr(func, TEST_TAGS, set())
-    setattr(func, TEST_TAGS, current_tags.union(set(tags)))
+def _add_tags(obj, tags):
+    current_tags = getattr(obj, TEST_TAGS, set())
+    setattr(obj, TEST_TAGS, current_tags.union(set(tags)))
 
 
 def tags(*tags, **attrs):
     def decorator(func):
-        _add_tags(func, tags, TEST_TAGS)
+        _add_tags(func, tags)
         _add_tags(func, ["{0}={1}".format(k, v) for k, v in attrs.items()])
         return func
     return decorator
 
 
-def data_driven_test(*dataset_sources, **kwargs):
+def data_driven_test(*dsls, **kwdsls):
     """Used to define the data source for a data driven test in a
     DataDrivenFixture decorated Unittest TestCase class"""
     def decorator(func):
-        """Combines and stores DatasetLists in __data_driven_test_data__"""
         dep_message = "DatasetList object required for data_generator"
-        combined_lists = kwargs.get("dataset_source") or DatasetList()
-        for key, value in kwargs.items():
-            if key != "dataset_source" and isinstance(value, DatasetList):
+        for key, value in kwdsls.items():
+            if isinstance(value, (DatasetList, _DSLInstance)):
                 value.apply_test_tags(key)
-            elif not isinstance(value, (DatasetList, DSLInstance)):
+            elif not isinstance(value, (DatasetList, _DSLInstance)):
                 warn(dep_message, DeprecationWarning)
-            combined_lists += value
-        for dataset_list in dataset_sources:
-            if not isinstance(dataset_list, (DatasetList, DSLInstance)):
-                warn(dep_message, DeprecationWarning)
-            combined_lists += dataset_list
-        setattr(func, DATA_DRIVEN_ATTR, combined_lists)
+        setattr(func, DATA_DRIVEN_ATTR, list(dsls) + kwdsls.values())
         return func
     return decorator
 
@@ -79,7 +72,7 @@ def DataDrivenClass(*dataset_lists):
 
 
 def DataDrivenFixture(cls):
-    warn("DataDrivenFixture does nothing", DeprecationWarning)
+    warn("DataDrivenFixture does nothing\n", DeprecationWarning)
     return cls
 
 

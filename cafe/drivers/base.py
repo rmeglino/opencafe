@@ -201,25 +201,23 @@ def print_mug(name, brewing_from):
     print(border)
 
 
-def get_exception_string(file_=None, method=None, value=None, exception=None):
+def get_exception_string(file_, method, value=None, exception=None):
     string = ""
     string += "{0}\n".format("=" * 70)
-    if file_:
-        string += "{0}: ".format(file_)
-    if method:
-        string += "{0}: ".format(method)
+    string += "{0}: ".format(file_)
+    string += "{0}: ".format(method)
     if value:
         string += "{0}: ".format(value)
     if exception:
         string += "{0}:".format(exception)
     string += "\n{0}\n".format("-" * 70)
-    if exception is not None:
+    if exception:
         string += format_exc()
     string += "\n"
     return string
 
 
-def print_exception(file_=None, method=None, value=None, exception=None):
+def print_exception(file_, method, value=None, exception=None):
     """
         Prints exceptions in a standard format to stderr.
     """
@@ -232,6 +230,16 @@ def get_error(exception=None):
     return getattr(exception, "errno", 1)
 
 
+def error(
+    file_=None, method=None, value=None, exception=None,
+        exit_on_error=True):
+    string = get_exception_string(file_, method, value, exception)
+    logging.getLogger().error(string)
+    print(string, file=sys.stderr)
+    if exit_on_error:
+        exit(get_error(exception))
+
+
 class ErrorMixin(object):
     def error(
         self, file_=None, method=None, value=None, exception=None,
@@ -241,4 +249,4 @@ class ErrorMixin(object):
         self._log.error(string)
         print(string, file=sys.stderr)
         if exit_on_error:
-            sys.exit(get_error(exception))
+            exit(get_error(exception))

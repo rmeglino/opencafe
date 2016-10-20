@@ -18,9 +18,6 @@ import sys
 # as an experimental workaround if you're having pickling errors.
 try:
     from multiprocess import Process, Queue
-    sys.stdout.write(
-        "\n\nUtilizing the pathos multiprocess library. "
-        "This feature is experimental\n\n")
 except:
     from multiprocessing import Process, Queue
 
@@ -31,7 +28,6 @@ import time
 from collections import defaultdict
 
 from cafe.common.reporting import cclogging
-from cafe.common.reporting.reporter import Reporter
 from cafe.drivers.base import ErrorMixin
 from cafe.drivers.unittest.arguments import ArgumentParser
 from cafe.drivers.unittest.result import CafeTextTestResult
@@ -62,17 +58,19 @@ class UnittestRunner(BaseCafeClass, ErrorMixin):
         worker_list = []
         to_worker = Queue()
         from_worker = Queue()
-
-        for _ in range(self.cl_args.workers):
-            proc = Consumer(to_worker, from_worker, self.cl_args.verbose)
+        targets = list(self.suite_builder.load_all(
+            self.cl_args.testrepos, self.cl_args.file).items())
+        for _ in range(self.cl_args.module_workers):
+            proc = Consumer(
+                to_worker, from_worker, self.cl_args.verbose,
+                self.cl_args.class_workers, self.cl_args.test_workers)
             worker_list.append(proc)
             proc.start()
 
-        for count, (module, tests) in enumerate(self.suite_builder.load_all(
-                self.cl_args.testrepos, self.cl_args.file).items(), 1):
+        for count, (module, tests) in enumerate(targets, 1):
             to_worker.put((module, tests))
 
-        for _ in range(self.cl_args.workers):
+        for _ in range(self.cl_args.module_workers):
             to_worker.put(None)
 
         # A second try catch is needed here because queues can cause locking
@@ -81,20 +79,20 @@ class UnittestRunner(BaseCafeClass, ErrorMixin):
             master_result = CafeTextTestResult(
                 stream=sys.stderr, verbosity=self.cl_args.verbose)
             master_result.name = "Runner"
+            master_result.startTestRun()
             for _ in range(count):
                 result = from_worker.get()
                 result.log_result()
                 master_result.addResult(result)
+            master_result.stopTestRun()
             master_result.printErrors()
-
-            tests_run, errors, failures = (
-                master_result.testsRun, master_result.errors, master_result.failures)
-            #print(tests_run, errors, failures)
-
+            master_result.print_results()
+            print("{0}\nDetailed logs: {1}\n{2}".format(
+                "=" * 150, self.config.test_log_dir, "-" * 150))
         except KeyboardInterrupt:
             self.error("Runner", "run", "Keyboard Interrupt, exiting...")
             os.killpg(0, 9)
-        return bool(sum([errors, failures, not tests_run]))
+        return bool(not master_result.wasSuccessful())
 
     @staticmethod
     def print_mug():
@@ -125,73 +123,28 @@ class UnittestRunner(BaseCafeClass, ErrorMixin):
         print("LOG PATH..........: {0}".format(self.config.test_log_dir))
         print("=" * 150)
 
-    def compile_results(self, run_time, datagen_time, results):
-        """Summarizes results and writes results to file if --result used"""
-        all_results = []
-        result_dict = {"tests": 0, "errors": 0, "failures": 0, "skipped": 0}
-        for dic in results:
-            result = dic["result"]
-            all_results += dic.get("all_results")
-            summary = dic.get("summary")
-            for key in result_dict:
-                result_dict[key] += summary[key]
-
-            if result.stream.getvalue().strip():
-                # this line can be replaced to add an extensible stdout/err log
-                sys.stderr.write("{0}\n\n".format(
-                    result.stream.getvalue().strip()))
-
-        if self.cl_args.result is not None:
-            reporter = Reporter(
-                execution_time=run_time,
-                datagen_time=datagen_time,
-                all_results=all_results)
-            reporter.generate_report(
-                self.cl_args.result, self.cl_args.result_directory)
-        return self.print_results(
-            run_time=run_time, datagen_time=datagen_time, **result_dict)
-
-    def print_results(self, tests, errors, failures, skipped,
-                      run_time, datagen_time):
-        """Prints results summerized in compile_results messages"""
-        print("{0}".format("-" * 70))
-        print("Ran {0} test{1} in {2:.3f}s".format(
-            tests, "s" * bool(tests - 1), run_time))
-        print("Generated datasets in {0:.3f}s".format(datagen_time))
-        print("Total runtime {0:.3f}s".format(run_time + datagen_time))
-
-        results = []
-        if failures:
-            results.append("failures={0}".format(failures))
-        if skipped:
-            results.append("skipped={0}".format(skipped))
-        if errors:
-            results.append("errors={0}".format(errors))
-
-        status = "FAILED" if failures or errors else "PASSED"
-        print("\n{} ".format(status), end="\n" * (not bool(results)))
-        if results:
-            print("({})".format(", ".join(results)))
-        print("{0}\nDetailed logs: {1}\n{2}".format(
-            "=" * 150, self.config.test_log_dir, "-" * 150))
-        return tests, errors, failures
-
 
 class Consumer(Process, BaseCafeClass, ErrorMixin):
     """This class runs as a process and does the test running"""
 
-    def __init__(self, to_worker, from_worker, verbose):
+    def __init__(
+        self, to_worker, from_worker, verbose, class_workers=1,
+            test_workers=1):
         Process.__init__(self)
         self.to_worker = to_worker
         self.from_worker = from_worker
         self.verbose = verbose
+        self.class_workers = class_workers
+        self.test_workers = test_workers
 
     def run(self):
         """Starts the worker listening"""
         logger = logging.getLogger('')
         while True:
             result = CafeTextTestResult(verbosity=self.verbose)
-            suite = OpenCafeUnittestTestSuite()
+            suite = OpenCafeUnittestTestSuite(
+                class_workers=self.class_workers,
+                test_workers=self.test_workers)
             data = self.to_worker.get()
             if data is None:
                 return
@@ -214,12 +167,8 @@ class Consumer(Process, BaseCafeClass, ErrorMixin):
 
 def entry_point():
     """Function setup.py links cafe-runner to"""
-    try:
-        runner = UnittestRunner()
-        root_log = logging.getLogger()
-        for handler in root_log.handlers:
-            handler.close()
-        exit(runner.run())
-    except KeyboardInterrupt:
-        print_exception("Runner", "run", "Keyboard Interrupt, exiting...")
-        os.killpg(0, 9)
+    runner = UnittestRunner()
+    root_log = logging.getLogger()
+    for handler in root_log.handlers:
+        handler.close()
+    exit(runner.run())

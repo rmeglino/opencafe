@@ -17,7 +17,11 @@ a version of addCleanup that can be used in classmethods.  This allows a
 more granular approach to teardown to be used in setUpClass and classmethod
 helper methods
 """
-from multiprocess.pool import Pool as _Pool, Process as _Process
+try:
+    from multiprocess.pool import Pool as _Pool, Process as _Process
+except:
+    from multiprocessing.pool import Pool as _Pool, Process as _Process
+
 
 from unittest2.suite import TestSuite, _DebugResult, util
 import unittest
@@ -39,6 +43,11 @@ class Pool(_Pool):
 
 
 class OpenCafeUnittestTestSuite(TestSuite):
+    def __init__(self, tests=(), class_workers=1, test_workers=1):
+        self._class_workers = class_workers
+        self._test_workers = test_workers
+        super(OpenCafeUnittestTestSuite, self).__init__(tests)
+
     def _tearDownPreviousClass(self, test, result):
         currentClass = test.__class__
         if not getattr(currentClass, "_setup_completed", False):
@@ -92,27 +101,33 @@ class OpenCafeUnittestTestSuite(TestSuite):
             s.__class__, unittest.TestSuite)]
         test_list = [s for s in self if not issubclass(
             s.__class__, unittest.TestSuite)]
+
         if suite_list:
+            workers = self._class_workers
+            run_list = suite_list
             self._handleModuleFixture(list(suite_list[0])[0], result)
             result._previousTestClass = list(suite_list[0])[0].__class__
             if getattr(result, '_moduleSetUpFailed', False):
                 return result
-            pool = Pool(3)
-            results = pool.map(
-                lambda x: x[0](x[1]), [(suite, CafeTextTestResult(
-                    verbosity=result.verbosity)) for suite in suite_list])
-            for r in results:
-                result.addResult(r)
-            self._handleModuleTearDown(result)
         elif test_list:
+            workers = self._test_workers
+            run_list = test_list
             self._handleClassSetUp(test_list[0], result)
             result._previousTestClass = test_list[0].__class__
-            pool = Pool(3)
+        if workers == 1:
+            for test in run_list:
+                test(result)
+        else:
+            pool = Pool(workers)
             results = pool.map(
                 lambda x: x[0](x[1]), [(test, CafeTextTestResult(
-                    verbosity=result.verbosity)) for test in test_list])
+                    verbosity=result.verbosity)) for test in run_list])
+            pool.close()
             for r in results:
                 result.addResult(r)
+        if suite_list:
+            self._handleModuleTearDown(result)
+            result._testRunEntered = False
+        elif test_list:
             self._tearDownPreviousClass(test_list[0], result)
-        result._testRunEntered = False
         return result

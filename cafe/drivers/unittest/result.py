@@ -3,7 +3,6 @@ from datetime import datetime
 from threading import Lock
 from unittest import util
 import logging
-import time
 import traceback2 as traceback
 import inspect
 
@@ -106,7 +105,7 @@ class CafeTestResult(BaseCafeClass):
     @property
     def time(self):
         if self.stop_time is None or self.start_time is None:
-            return None
+            return 0.0
         return (self.stop_time - self.start_time).total_seconds()
 
     def printErrors(self):
@@ -114,8 +113,6 @@ class CafeTestResult(BaseCafeClass):
 
     def startTest(self, test):
         "Called when the given test is about to be run"
-        while getattr(test, "_testMethodName", str(test)):
-            time.sleep(.2)
         test_log = self.running_tests[test._testMethodName]
         test_log.start_time = datetime.now()
         test_log.name = str(test)
@@ -268,10 +265,14 @@ class CafeTextTestResult(CafeTestResult):
         self.log_events += result.log_events
         self.other_errors += result.other_errors
         self.test_log += result.test_log
+        self.running_tests.update(result.running_tests)
         if hasattr(result.stream, "getvalue"):
-            self.stream.write(result.stream.getvalue())
+            value = result.stream.getvalue().strip()
+            if value:
+                self.stream.writeln(value)
 
     def startTest(self, test):
+        super(CafeTextTestResult, self).startTest(test)
         test_log = self.running_tests[test._testMethodName]
         test_log.description = self.getDescription(test)
 
@@ -370,3 +371,16 @@ class CafeTextTestResult(CafeTestResult):
             return '\n'.join((str(test), doc_first_line))
         else:
             return str(test)
+
+    def print_results(self):
+        """Prints results summerized in compile_results messages"""
+        self.stream.writeln("-" * 70)
+        self.stream.writeln("Ran {0} test{1} in {2:.3f}s".format(
+            self.testsRun, "s" * bool(self.testsRun - 1), self.time))
+        err = ""
+        err += "failures={0}".format(self.failures)
+        err += "{0}skipped={1}".format(" " * bool(err), self.skipped)
+        err += "{0}errors={1}".format(" " * bool(err), self.errors)
+        status = "PASSED" if self.wasSuccessful() else "FAILED"
+        self.stream.writeln(
+            "\n{0}{1}".format(status, " ({})".format(err) * bool(err)))

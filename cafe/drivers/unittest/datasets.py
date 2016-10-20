@@ -14,6 +14,9 @@
 from itertools import product
 from string import ascii_letters, digits
 import json
+import uuid
+
+from cafe.engine.base import BaseCafeClass
 
 ALLOWED_FIRST_CHAR = "_{0}".format(ascii_letters)
 ALLOWED_OTHER_CHARS = "{0}{1}".format(ALLOWED_FIRST_CHAR, digits)
@@ -42,38 +45,50 @@ class _Dataset(object):
 class DatasetListType(type):
     def __new__(cls, name, parents, vars_):
         new_class = super(DatasetListType, cls).__new__(
-            cls, name, parents, vars_)
+            cls, uuid.uuid4().get_hex(), parents, vars_)
+        def init_override(self, *args, **kwargs):
+            self.__args = args
+            self.__kwargs = kwargs
+            del self.__init__
+
+        def iter_overide(self):
+            if not self:
+                super(self.__class__, super(self.dsl = self.cls(*self.args, **self.kwargs)
+            self.dsl.apply_test_tags(*self.tags)
+            for dataset in self.dsl:
+                yield dataset
+
+        def getitem_overide(self, key):
+            if self.dsl is None:
+                self.dsl = self.cls(*self.args, **self.kwargs)
+            if isinstance(key, int):
+                raise Exception("Only slice supported")
+            for i in self.dsl[key.start:key.stop:key.step]:
+                yield i
+        extended = super(DatasetListType, cls).__new__(
+            cls, name, (new_class, ), {"__init__": init_override})
         if (name == "DatasetList" and
                 new_class.__module__ == 'cafe.drivers.unittest.datasets'):
             return new_class
-        ret_obj = RealDSLClass(new_class)
-        ret_obj.__name__ = name
+        ret_obj = super(DatasetListType, cls).__new__(
+            cls, name, (_DSLInstance, ), {"cls": new_class})
+        ret_obj.__module__ = new_class.__module__
         return ret_obj
 
 
-class RealDSLClass(object):
-    def __init__(self, cls):
-        self.cls = cls
+class _DSLInstance(object):
+    cls = None
 
-    def __call__(self, *args, **kwargs):
-        return DSLInstance(self.cls, args, kwargs)
+    def __init__(self, *args, **kwargs):
 
 
-class DSLInstance(object):
-    def __init__(self, cls, args, kwargs):
-        self.cls = cls
-        self.args = args
-        self.kwargs = kwargs
-        self.datasets = None
-
-    def __iter__(self):
-        if self.datasets is None:
-            self.datasets = self.cls(*self.args, **self.kwargs)
-        for dataset in self.datasets:
-            yield dataset
 
 
-class DatasetList(list):
+    def apply_test_tags(self, *tags, **ktags):
+        self.tags += tags + ["{0}={1}".format(k, v) for k, v in ktags.items()]
+
+
+class DatasetList(list, BaseCafeClass):
     __metaclass__ = DatasetListType
     """Specialized list-like object that holds Dataset objects"""
 
@@ -142,13 +157,6 @@ class DatasetList(list):
             string = "{0}{1}".format(new_char, string[1:])
         return string
 
-    def __call__(self):
-        """Support for runtime datageneration"""
-        self._generate_dataset()
-
-    def _generate_dataset(self):
-        raise NotImplemented
-
 
 class DatasetListCombiner(DatasetList):
     """Class that can be used to combine multiple DatasetList objects together.
@@ -158,7 +166,6 @@ class DatasetListCombiner(DatasetList):
     """
 
     def __init__(self, *datasets):
-        super(DatasetListCombiner, self).__init__()
         for dataset_list in product(*datasets):
             tmp_dic = {}
             names = []
@@ -176,7 +183,6 @@ class DatasetGenerator(DatasetList):
     """
 
     def __init__(self, list_of_dicts, base_dataset_name=None):
-        super(DatasetGenerator, self).__init__()
         count = 0
         for kwdict in list_of_dicts:
             test_name = "{0}_{1}".format(base_dataset_name or "dataset", count)
@@ -190,7 +196,6 @@ class TestMultiplier(DatasetList):
     """
 
     def __init__(self, num_range):
-        super(TestMultiplier, self).__init__()
         for num in range(num_range):
             name = "{0}".format(num)
             self.append_new_dataset(name, dict())
@@ -206,7 +211,6 @@ class DatasetFileLoader(DatasetList):
     load order, so that not all datasets need to be named.
     """
     def __init__(self, file_object):
-        super(DatasetFileLoader, self).__init__()
         content = json.loads(str(file_object.read()))
         count = 0
         for dataset in content:

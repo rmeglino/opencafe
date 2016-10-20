@@ -24,9 +24,8 @@ import unittest
 
 from cafe.drivers.base import ErrorMixin
 from cafe.drivers.unittest.decorators import (
-    TEST_TAGS, DATA_DRIVEN_ATTR, DATA_DRIVEN_TEST_PREFIX, _add_tags)
+    TEST_TAGS, DATA_DRIVEN_ATTR, DATA_DRIVEN_PREFIX, _add_tags)
 from cafe.engine.base import BaseCafeClass
-from cafe.drivers.unittest.decorators import create_dd_class
 
 
 class TargetTest(BaseCafeClass, ErrorMixin):
@@ -34,92 +33,130 @@ class TargetTest(BaseCafeClass, ErrorMixin):
         self, filters, test_module, test_class=None, dd_module=None,
             dd_class=None, dd_json=None, test_name=None):
         self.filters = filters
-        self.test_module = test_module
-        self.test_class = test_class
-        self.dd_module = dd_module
-        self.dd_class = dd_class
+        self._test_module = test_module
+        self._test_class = test_class
+        self._dd_module = dd_module
+        self._dd_class = dd_class
         self.dd_json = dd_json
         self.test_name = test_name
+        self.dd_class
+        self.test_class
+
+    @property
+    def test_module(self):
+        return self.get_module(self._test_module, False, True)
+
+    @property
+    def dd_module(self):
+        return self.get_module(
+            self._dd_module, not self._dd_module, bool(self._dd_module))
+
+    @property
+    def dd_class(self):
+        return self.get_var(
+            self.dd_module, self._dd_class, not self._dd_class,
+            bool(self._dd_class))
+
+    @property
+    def test_class(self):
+        return self.get_var(
+            self.test_module, self._test_class, not self._test_class,
+            bool(self._test_class))
 
     def __eq__(self, obj):
         return all([
             self.filters == obj.filters,
-            self.test_module == obj.test_module,
-            self.test_class == obj.test_class,
-            self.dd_module == obj.dd_module,
-            self.dd_class == obj.dd_class,
+            self._test_module == obj._test_module,
+            self._test_class == obj._test_class,
+            self._dd_module == obj._dd_module,
+            self._dd_class == obj._dd_class,
             self.dd_json == obj.dd_json,
             self.test_name == obj.test_name])
 
-    @property
-    def _module(self):
+    def get_module(self, module, optional=False, exit_on_error=False):
         try:
-            return importlib.import_module(self.test_module)
+            return importlib.import_module(module)
         except Exception as e:
-            self.error(
-                "Suite Builder", "TargetTest",
-                "Failed to import test module: {0}".format(self.test_module),
-                exception=e)
-            return None
+            if optional is False:
+                self.error(
+                    "TargetTest", "get_module",
+                    "Failed to import module: {0}".format(module),
+                    exception=e, exit_on_error=exit_on_error)
+
+    def get_var(self, obj, var, optional=False, exit_on_error=False):
+        try:
+            return getattr(obj, var)
+        except Exception as e:
+            if optional is False:
+                self.error(
+                    "TargetTest", "get_var",
+                    "Failed to get variable {0} from {1}".format(
+                        var, str(obj)), exception=e,
+                    exit_on_error=exit_on_error)
+
+    def expand_tests(self, cls):
+        for var_name in dir(cls):
+            if var_name.startswith(DATA_DRIVEN_PREFIX):
+                func = self.get_var(cls, var_name)
+                dataset_lists = self.get_var(
+                    func, DATA_DRIVEN_ATTR, exit_on_error=False)
+                for dsl in dataset_lists:
+                    if not list(dsl):
+                        self.error(
+                            "TargetTest", "expand_tests",
+                            "DSL empty on dd_test: {0} dataset {1}".format(
+                                var_name, dsl), exit_on_error=False)
+                    for dataset in dsl:
+                        self.create_dd_func(cls, func, dataset)
+
+    def get_datasets(self, cls):
+        if self.dd_class:
+            dataset = (
+                self.dd_class(**self.dd_json)
+                if isinstance(self.dd_json, dict) else
+                self.dd_class(*self.dd_json)
+                if isinstance(self.dd_json, list) else self.dd_class())
+            if not list(dataset):
+                self.error(
+                    "TargetTest", "get_datasets",
+                    "Returned empty dataset: {0} args {1}".format(
+                        self._dd_class, self.dd_json))
+            dataset_lists = [dataset]
+        else:
+            dataset_lists = self.get_var(cls, DATA_DRIVEN_ATTR, True)
+        return dataset_lists
 
     @property
-    def _classes(self):
-        if self._module is None:
+    def classes(self):
+        if self.test_module is None:
             return
-        if self.test_class is not None:
-            cls = getattr(self._module, self.test_class, None)
-            if cls is not None:
-                if self.dd_class is not None:
-                    dd_module = importlib.import_module(self.dd_module)
-                    dd_class = getattr(dd_module, self.dd_class, None)
-                    if dd_class is None:
-                        self.error(
-                            "TargetTest", "_classes",
-                            "Failed get dd class {0} from {1}".format(
-                                self.dd_class, self.dd_module))
-                        return
-                    datasets = (
-                        dd_class(**self.dd_json)
-                        if isinstance(self.dd_json, dict) else
-                        dd_class(*self.dd_json)
-                        if isinstance(self.dd_json, list) else dd_class())
-                    for dataset in datasets:
-                        class_name = re.sub(
-                            "fixture", "", self.test_class.__name__,
-                            flags=re.IGNORECASE)
-                        dataset.name = "{0}_{1}".format(
-                            class_name, dataset.name)
-                        yield create_dd_class(cls, dataset)
-
-                else:
-                    yield cls
-            else:
-                self.error(
-                    "TargetTest", "_classes",
-                    "Failed get test class {0} from {1}".format(
-                        self.test_class, self.test_module))
+        if self.test_class:
+            dataset_lists = self.get_datasets(self.test_class)
+            if dataset_lists is None:
+                yield self.test_class
+                return
+            for dsl in dataset_lists:
+                for dataset in dsl:
+                    yield self.create_dd_class(self.test_class, dataset)
         else:
-            for name in dir(self._module):
-                obj = getattr(self._module, name, None)
+            for name in dir(self.test_module):
+                obj = self.get_var(self.test_module, name, True)
                 if (isclass(obj) and issubclass(obj, unittest.TestCase) and
                         "fixture" not in obj.__name__.lower()):
                     yield obj
-
-    def _get_class(self, cls, dataset_lists):
-        dataset_lists = dataset_lists or getattr(cls, DATA_DRIVEN_ATTR, [])
-        for dataset_list in dataset_lists:
-            for dataset in dataset_list:
-                yield self.create_dd_class(cls, dataset)
 
     def __iter__(self):
         for cls, test_name in self.get_tests():
             yield cls, test_name
 
     def get_tests(self):
-        for cls in self._classes:
-            if self.test_name is not None:
-                yield cls, self.test_name
+        for cls in self.classes:
+            if self.test_name:
+                test = self.get_var(cls, self.test_name, exit_on_error=False)
+                if test is not None:
+                    yield cls, self.test_name
             else:
+                self.expand_tests(cls)
                 for test_name in self.get_tests_from_class(cls):
                     yield cls, test_name
 
@@ -169,7 +206,9 @@ class TargetTest(BaseCafeClass, ErrorMixin):
         """
         if dataset is None:
             return class_
-        new_class_name = "{0}_{1}".format(class_.__name__, dataset.name)
+        class_name = re.sub(
+            "fixture", "", class_.__name__, flags=re.IGNORECASE)
+        new_class_name = "{0}_{1}".format(class_name, dataset.name)
         new_class = type(new_class_name, (class_,), dataset.data)
         new_class.__module__ = class_.__module__
         module = importlib.import_module(class_.__module__)
@@ -183,14 +222,13 @@ class TargetTest(BaseCafeClass, ErrorMixin):
             """Docstring gets replaced by test docstring"""
             dd_test = getattr(self, func.__name__)
             dd_test(**dataset.data)
-        base_test_name = func.__name__[len(DATA_DRIVEN_TEST_PREFIX):]
-        new_test_name = "{0}_{1}".format(base_test_name, dataset.name)
+        new_test_name = "{0}_{1}".format(func.__name__[2:], dataset.name)
         new_test.__name__ = new_test_name
         new_test.__doc__ = func.__doc__
         for key, value in vars(func).items():
             if key != DATA_DRIVEN_ATTR:
                 setattr(new_test, key, value)
-        _add_tags(new_test, dataset.metadata.get('tags', []), TEST_TAGS)
+        _add_tags(new_test, dataset.metadata.get('tags', []))
         setattr(class_, new_test_name, new_test)
 
 
@@ -244,7 +282,7 @@ class SuiteBuilder(BaseCafeClass, ErrorMixin):
         dic = defaultdict(list)
         for line in fp:
             for test in self.parse_line(line):
-                dic[test.test_module].append(test)
+                dic[test._test_module].append(test)
         return dic
 
     def parse_line(self, line):
@@ -305,7 +343,7 @@ class SuiteBuilder(BaseCafeClass, ErrorMixin):
         dic = defaultdict(list)
         for dotpath in dotpaths:
             for test in self.load_dotpath(dotpath):
-                dic[test.test_module].append(test)
+                dic[test._test_module].append(test)
         return dic
 
     def load_dotpath(self, dotpath):

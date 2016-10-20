@@ -16,37 +16,12 @@ from __future__ import print_function
 import argparse
 import os
 import re
-import sys
 
-from cafe.drivers.base import print_exception, get_error
+from cafe.drivers.base import error
 from cafe.engine.config import EngineConfig
 from cafe.engine.models.data_interfaces import CONFIG_KEY
 
 ENGINE_CONFIG = EngineConfig()
-
-
-def tree(start):
-    """
-        Prints tree structure, files first then directories in alphabetical
-        order.
-    """
-    start = os.path.abspath(os.path.expanduser(start))
-    if not os.path.exists(start):
-        print_exception(
-            "Argument Parser", "tree", "{0} Does Not Exist".format(start))
-        return
-    elif os.path.isfile(start):
-        print("+-{0}".format(os.path.basename(start)))
-        return
-    for path, dirs, files in os.walk(start):
-        dirs.sort()
-        files.sort()
-        depth = path.replace(start, "").count(os.sep)
-        print("{0}{1}+-{2}/".format(
-            "  " * (depth > 0), "| " * (depth - 1), os.path.basename(path)))
-        for file_ in files:
-            if not file_.endswith(".pyc") and file_ != "__init__.py":
-                print("  {0}{1}".format("| " * depth, file_))
 
 
 class ConfigAction(argparse.Action):
@@ -59,7 +34,7 @@ class ConfigAction(argparse.Action):
         path = os.path.join(ENGINE_CONFIG.config_directory, value)
         if not os.path.exists(path):
             parser.error(
-                "ConfigAction: Config does not exist: {0}".format(path))
+                "Config does not exist: {0}".format(path), "ConfigAction")
         env_name = CONFIG_KEY.format(section_name="ENGINE", key="test_config")
         os.environ[env_name] = value
         setattr(namespace, self.dest, value)
@@ -72,8 +47,8 @@ class DataDirectoryAction(argparse.Action):
     def __call__(self, parser, namespace, value, option_string=None):
         if not os.path.exists(value):
             parser.error(
-                "DataDirectoryAction: Data directory does not exist: "
-                "{0}".format(value))
+                "Data directory does not exist: {0}".format(value),
+                "DataDirectoryAction")
         setattr(namespace, self.dest, value)
 
 
@@ -84,18 +59,8 @@ class InputFileAction(argparse.Action):
     def __call__(self, parser, namespace, value, option_string=None):
         if not os.path.exists(value):
             parser.error(
-                "InputFileAction: File does not exist: {0}".format(value))
+                "File does not exist: {0}".format(value), "InputFileAction")
         setattr(namespace, self.dest, value)
-
-
-class ListAction(argparse.Action):
-    """
-        Custom action that lists either configs or tests.
-    """
-    def __call__(self, parser, namespace, values, option_string=None):
-        print("\n<[CONFIGS]>\n")
-        tree(ENGINE_CONFIG.config_directory)
-        exit(0)
 
 
 class TagAction(argparse.Action):
@@ -109,7 +74,8 @@ class TagAction(argparse.Action):
         else:
             setattr(namespace, "all_tags", False)
         if len(values) < 1:
-            parser.error("argument --tags/-t: expected at least one argument")
+            parser.error(
+                "--tags/-t: expected at least one argument", "TagAction")
         setattr(namespace, self.dest, values)
 
 
@@ -124,8 +90,8 @@ class RegexAction(argparse.Action):
                 regex_list.append(re.compile(regex))
             except re.error as exception:
                 parser.error(
-                    "RegexAction: Invalid regex {0} reason: {1}".format(
-                        regex, exception))
+                    "Invalid regex {0}".format(regex), "RegexAction",
+                    exception)
         setattr(namespace, self.dest, regex_list)
 
 
@@ -233,23 +199,30 @@ class ArgumentParser(argparse.ArgumentParser):
             help="Set unittest stdout verbosity")
 
         self.add_argument(
-            "--workers", "-w",
+            "--module-workers",
             nargs="?",
             default=1,
             type=int,
             help="Set number of module subprocceses")
 
         self.add_argument(
-            "--threads", "-T",
+            "--class-workers",
             nargs="?",
             default=1,
             type=int,
-            help="Set number of class threads")
+            help="Set number of class subprocceses")
 
-    def error(self, message):
-        self.print_usage(sys.stderr)
-        print_exception("Argument Parser", message)
-        exit(get_error())
+        self.add_argument(
+            "--test-workers",
+            nargs="?",
+            default=1,
+            type=int,
+            help="Set number of test subprocceses")
+
+    def error(self, message, method=None, exception=None):
+        value = message if method else None
+        method = method or message
+        error("Arguments", method, value, exception, exit_on_error=True)
 
     def parse_args(self, *args, **kwargs):
         args = super(ArgumentParser, self).parse_args(*args, **kwargs)
