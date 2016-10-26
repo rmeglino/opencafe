@@ -168,7 +168,7 @@ class Consumer(Process, BaseCafeClass, ErrorMixin):
 def entry_point():
     """Function setup.py links cafe-runner to"""
     runner = UnittestRunner()
+    status_code = runner.run()
     root_log = logging.getLogger()
-    for handler in root_log.handlers:
-        handler.close()
-    exit(runner.run())
+    [handler.close()for handler in root_log.handlers]
+    sys.exit(status_code)

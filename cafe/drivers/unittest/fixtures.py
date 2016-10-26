@@ -25,7 +25,7 @@ from cafe.drivers.unittest.result import CafeTextTestResult
 class BaseTestFixture(unittest2.TestCase, BaseCafeClass):
     @classproperty
     def _class_cleanup_tasks(cls):
-        if not hasattr(cls, "_class_cleanup_tasks"):
+        if not hasattr(cls, "___class_cleanup_tasks"):
             cls.___class_cleanup_tasks = []
         return cls.___class_cleanup_tasks
 

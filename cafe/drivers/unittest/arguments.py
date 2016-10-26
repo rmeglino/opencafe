@@ -17,7 +17,7 @@ import argparse
 import os
 import re
 
-from cafe.drivers.base import error
+from cafe.drivers.base import get_exception_string
 from cafe.engine.config import EngineConfig
 from cafe.engine.models.data_interfaces import CONFIG_KEY
 
@@ -220,9 +220,9 @@ class ArgumentParser(argparse.ArgumentParser):
             help="Set number of test subprocceses")
 
     def error(self, message, method=None, exception=None):
-        value = message if method else None
-        method = method or message
-        error("Arguments", method, value, exception, exit_on_error=True)
+        msg = "\n{0}".format(get_exception_string(
+            "Argument Parser", method, message, exception))
+        super(ArgumentParser, self).error(msg)
 
     def parse_args(self, *args, **kwargs):
         args = super(ArgumentParser, self).parse_args(*args, **kwargs)

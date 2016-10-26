@@ -136,6 +136,7 @@ OPENCAFE_SUB_DIRS = _NamespaceDict(
 
 
 class EngineDirectoryManager(object):
+    OPENCAFE_ROOT_DIR = OPENCAFE_ROOT_DIR
 
     wrapper = textwrap.TextWrapper(
         initial_indent="* ", subsequent_indent="  ", break_long_words=False)

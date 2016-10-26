@@ -85,6 +85,7 @@ class CafeTestResult(BaseCafeClass):
     def __init__(self):
         self.buffer = False
         self.errors = 0
+        self.non_test_errors = 0
         self.expectedFailures = 0
         self.failfast = False
         self.failures = 0
@@ -98,7 +99,6 @@ class CafeTestResult(BaseCafeClass):
         self.testsRun = 0
         self.unexpectedSuccesses = 0
         self.log_events = []
-        self.other_errors = []
         self.running_tests = defaultdict(TestLog)
         self.test_log = []
 
@@ -113,7 +113,7 @@ class CafeTestResult(BaseCafeClass):
 
     def startTest(self, test):
         "Called when the given test is about to be run"
-        test_log = self.running_tests[test._testMethodName]
+        test_log = self.running_tests[str(test)]
         test_log.start_time = datetime.now()
         test_log.name = str(test)
         self.testsRun += 1
@@ -122,9 +122,9 @@ class CafeTestResult(BaseCafeClass):
         self.start_time = datetime.now()
 
     def stopTest(self, test):
-        test_log = self.running_tests[test._testMethodName]
+        test_log = self.running_tests[str(test)]
         test_log.stop_time = datetime.now()
-        del self.running_tests[test._testMethodName]
+        del self.running_tests[str(test)]
         self.test_log.append(test_log)
 
     def stopTestRun(self):
@@ -132,29 +132,27 @@ class CafeTestResult(BaseCafeClass):
 
     def addError(self, test, err):
         self.errors += 1
-        if test._testMethodName in self.running_tests:
-            test_log = self.running_tests[test._testMethodName]
-        else:
-            test_log = TestLog()
-            test_log.name = str(test)
-            self.other_errors.append(test_log)
+        test_log = self.running_tests[str(test)]
+        test_log.name = str(test)
+        test_log.err = self._exc_info_to_string(err, test)
+        test_log.status = TEST_STATUSES.ERROR
+
+    def addNonTestError(self, test, err):
+        self.non_test_errors += 1
+        test_log = self.running_tests[str(test)]
+        test_log.name = str(test)
         test_log.err = self._exc_info_to_string(err, test)
         test_log.status = TEST_STATUSES.ERROR
 
     def addFailure(self, test, err):
         self.failures += 1
-        if test._testMethodName in self.running_tests:
-            test_log = self.running_tests[test._testMethodName]
-        else:
-            test_log = TestLog()
-            test_log.name = str(test)
-            self.other_errors.append(test_log)
-        test_log = self.running_tests[test._testMethodName]
+        test_log = self.running_tests[str(test)]
+        test_log.name = str(test)
         test_log.err = self._exc_info_to_string(err, test)
         test_log.status = TEST_STATUSES.FAILURE
 
     def addSubTest(self, test, subtest, err):
-        test_log = self.running_tests[test._testMethodName]
+        test_log = self.running_tests[str(test)]
         subtest_log = TestLog()
         test_log.append(subtest_log)
         subtest_log.name = str(subtest)
@@ -169,22 +167,22 @@ class CafeTestResult(BaseCafeClass):
 
     def addSuccess(self, test):
         self.successes += 1
-        test_log = self.running_tests[test._testMethodName]
+        test_log = self.running_tests[str(test)]
         test_log.status = TEST_STATUSES.SUCCESS
 
     def addSkip(self, test, reason):
         self.skipped += 1
-        test_log = self.running_tests[test._testMethodName]
+        test_log = self.running_tests[str(test)]
         test_log.status = TEST_STATUSES.SKIP
 
     def addExpectedFailure(self, test, err):
         self.expectedFailures += 1
-        test_log = self.running_tests[test._testMethodName]
+        test_log = self.running_tests[str(test)]
         test_log.status = TEST_STATUSES.EXPECTED_FAILURE
 
     def addUnexpectedSuccess(self, test):
         self.unexpectedSuccesses += 1
-        test_log = self.running_tests[test._testMethodName]
+        test_log = self.running_tests[str(test)]
         test_log.status = TEST_STATUSES.UNEXPECTED_SUCCESS
 
     def wasSuccessful(self):
@@ -263,8 +261,8 @@ class CafeTextTestResult(CafeTestResult):
         self.testsRun += result.testsRun
         self.unexpectedSuccesses += result.unexpectedSuccesses
         self.log_events += result.log_events
-        self.other_errors += result.other_errors
         self.test_log += result.test_log
+        self.non_test_errors += result.non_test_errors
         self.running_tests.update(result.running_tests)
         if hasattr(result.stream, "getvalue"):
             value = result.stream.getvalue().strip()
@@ -273,13 +271,13 @@ class CafeTextTestResult(CafeTestResult):
 
     def startTest(self, test):
         super(CafeTextTestResult, self).startTest(test)
-        test_log = self.running_tests[test._testMethodName]
+        test_log = self.running_tests[str(test)]
         test_log.description = self.getDescription(test)
 
     def _printtest(self, test):
-        test_log = self.running_tests[test._testMethodName]
+        test_log = self.running_tests[str(test)]
         if self.showAll:
-            self.stream.write(test_log.description)
+            self.stream.write(test_log.description or str(test))
             self.stream.write(" ... ")
             self.stream.flush()
 
@@ -344,11 +342,11 @@ class CafeTextTestResult(CafeTestResult):
         self.printErrorList(TEST_STATUSES.FAILURE)
 
     def printErrorList(self, status):
-        for test in self.test_log:
+        for test in list(self.running_tests.values()) + self.test_log:
             if test.status == status:
                 self.stream.writeln(self.separator1)
                 self.stream.writeln(
-                    "{0}: {1}".format(status, test.description))
+                    "{0}: {1}".format(status, test.description or test.name))
                 self.stream.writeln(self.separator2)
                 self.stream.writeln(test.err)
 
@@ -362,7 +360,7 @@ class CafeTextTestResult(CafeTestResult):
 
     def addSubTest(self, test, subtest, err):
         super(CafeTextTestResult, self).addSubTest(test, subtest, err)
-        log = self.running_tests[test._testMethodName].subtests[-1]
+        log = self.running_tests[str(test)].subtests[-1]
         self.stream.writeln("\n\t{0} ... {1}".format(log.name, log.status))
 
     def getDescription(self, test):
@@ -381,6 +379,17 @@ class CafeTextTestResult(CafeTestResult):
         err += "failures={0}".format(self.failures)
         err += "{0}skipped={1}".format(" " * bool(err), self.skipped)
         err += "{0}errors={1}".format(" " * bool(err), self.errors)
+        err += "{0}class/module errors={1}".format(
+            " " * bool(err), self.non_test_errors)
         status = "PASSED" if self.wasSuccessful() else "FAILED"
         self.stream.writeln(
             "\n{0}{1}".format(status, " ({})".format(err) * bool(err)))
+
+    def addNonTestError(self, test, err):
+        super(CafeTextTestResult, self).addNonTestError(test, err)
+        if self.showAll:
+            self._printtest(test)
+            self.stream.writeln(TEST_STATUSES.ERROR)
+        elif self.dots:
+            self.stream.write('E')
+            self.stream.flush()

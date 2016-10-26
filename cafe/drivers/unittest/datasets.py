@@ -14,7 +14,6 @@
 from itertools import product
 from string import ascii_letters, digits
 import json
-import uuid
 
 from cafe.engine.base import BaseCafeClass
 
@@ -45,47 +44,37 @@ class _Dataset(object):
 class DatasetListType(type):
     def __new__(cls, name, parents, vars_):
         new_class = super(DatasetListType, cls).__new__(
-            cls, uuid.uuid4().get_hex(), parents, vars_)
-        def init_override(self, *args, **kwargs):
-            self.__args = args
-            self.__kwargs = kwargs
-            del self.__init__
+            cls, name, parents, vars_)
+        init = vars(new_class).get("__init__")
+        if init is not None:
+            def __init__(self, *args, **kwargs):
+                if not hasattr(self, "_init_ran"):
+                    self._init_ran = False
+                    self.__args = args
+                    self.__kwargs = kwargs
+                else:
+                    init(self, *args, **kwargs)
 
-        def iter_overide(self):
-            if not self:
-                super(self.__class__, super(self.dsl = self.cls(*self.args, **self.kwargs)
-            self.dsl.apply_test_tags(*self.tags)
-            for dataset in self.dsl:
-                yield dataset
+            def __iter__(self):
+                if not self._init_ran:
+                    init(self, *self.__args, **self.__kwargs)
+                    self._init_ran = True
+                for i in super(new_class, self).__iter__():
+                    yield i
 
-        def getitem_overide(self, key):
-            if self.dsl is None:
-                self.dsl = self.cls(*self.args, **self.kwargs)
-            if isinstance(key, int):
-                raise Exception("Only slice supported")
-            for i in self.dsl[key.start:key.stop:key.step]:
-                yield i
-        extended = super(DatasetListType, cls).__new__(
-            cls, name, (new_class, ), {"__init__": init_override})
-        if (name == "DatasetList" and
-                new_class.__module__ == 'cafe.drivers.unittest.datasets'):
-            return new_class
-        ret_obj = super(DatasetListType, cls).__new__(
-            cls, name, (_DSLInstance, ), {"cls": new_class})
-        ret_obj.__module__ = new_class.__module__
-        return ret_obj
+            def __getitem__(self, key):
+                if isinstance(key, int):
+                    raise Exception("Only slice supported")
+                if not self._init_ran:
+                    init(self, *self.__args, **self.__kwargs)
+                    self._init_ran = True
+                for i in super(new_class, self).__getitem__(key):
+                    yield i
 
-
-class _DSLInstance(object):
-    cls = None
-
-    def __init__(self, *args, **kwargs):
-
-
-
-
-    def apply_test_tags(self, *tags, **ktags):
-        self.tags += tags + ["{0}={1}".format(k, v) for k, v in ktags.items()]
+            setattr(new_class, "__init__", __init__)
+            setattr(new_class, "__iter__", __iter__)
+            setattr(new_class, "__getitem__", __getitem__)
+        return new_class
 
 
 class DatasetList(list, BaseCafeClass):

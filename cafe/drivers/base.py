@@ -213,7 +213,6 @@ def get_exception_string(file_, method, value=None, exception=None):
     string += "\n{0}\n".format("-" * 70)
     if exception:
         string += format_exc()
-    string += "\n"
     return string
 
 
@@ -237,7 +236,9 @@ def error(
     logging.getLogger().error(string)
     print(string, file=sys.stderr)
     if exit_on_error:
-        exit(get_error(exception))
+        root_log = logging.getLogger()
+        [handler.close()for handler in root_log.handlers]
+        sys.exit(get_error(exception))
 
 
 class ErrorMixin(object):
@@ -245,8 +246,11 @@ class ErrorMixin(object):
         self, file_=None, method=None, value=None, exception=None,
             exit_on_error=False):
         exit_on_error |= getattr(self, "_exit_on_error", False)
-        string = get_exception_string(file_, method, value, exception)
+        string = "\n"
+        string += get_exception_string(file_, method, value, exception)
         self._log.error(string)
         print(string, file=sys.stderr)
         if exit_on_error:
-            exit(get_error(exception))
+            root_log = logging.getLogger()
+            [handler.close()for handler in root_log.handlers]
+            sys.exit(get_error(exception))

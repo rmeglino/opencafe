@@ -17,14 +17,12 @@ a version of addCleanup that can be used in classmethods.  This allows a
 more granular approach to teardown to be used in setUpClass and classmethod
 helper methods
 """
-try:
-    from multiprocess.pool import Pool as _Pool, Process as _Process
-except:
-    from multiprocessing.pool import Pool as _Pool, Process as _Process
-
-
-from unittest2.suite import TestSuite, _DebugResult, util
+import sys
 import unittest
+
+from multiprocess.pool import Pool as _Pool
+from multiprocess import Process as _Process
+from unittest2.suite import TestSuite, _DebugResult, util, _ErrorHolder
 
 from cafe.drivers.unittest.result import CafeTextTestResult
 
@@ -92,7 +90,8 @@ class OpenCafeUnittestTestSuite(TestSuite):
                 currentClass._classSetupFailed = True
                 className = util.strclass(currentClass)
                 errorName = 'setUpClass (%s)' % className
-                self._addClassOrModuleLevelException(result, e, errorName)
+                self._addClassOrModuleLevelException(
+                    result, e, errorName, currentClass)
                 currentClass._do_class_cleanup_tasks()
 
     def run(self, result, debug=False):
@@ -113,7 +112,12 @@ class OpenCafeUnittestTestSuite(TestSuite):
             workers = self._test_workers
             run_list = test_list
             self._handleClassSetUp(test_list[0], result)
+            if getattr(test_list[0].__class__, '_classSetupFailed', False):
+                return result
             result._previousTestClass = test_list[0].__class__
+        else:
+            return result
+
         if workers == 1:
             for test in run_list:
                 test(result)
@@ -131,3 +135,14 @@ class OpenCafeUnittestTestSuite(TestSuite):
         elif test_list:
             self._tearDownPreviousClass(test_list[0], result)
         return result
+
+    def _addClassOrModuleLevelException(
+            self, result, exception, errorName, currentClass=None):
+        error = _ErrorHolder(errorName)
+        if isinstance(exception, unittest.case.SkipTest):
+            if currentClass is not None:
+                unittest.skip(str(exception))(currentClass)
+            else:
+                result.addSkip(error, str(exception))
+        else:
+            result.addNonTestError(error, sys.exc_info())

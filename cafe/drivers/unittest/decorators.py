@@ -16,7 +16,7 @@ import logging
 import re
 
 from cafe.common.reporting import cclogging
-from cafe.drivers.unittest.datasets import DatasetList, _DSLInstance
+from cafe.drivers.unittest.datasets import DatasetList
 
 DATA_DRIVEN_ATTR = "__data_driven_test_data__"
 DATA_DRIVEN_PREFIX = "ddtest_"
@@ -48,9 +48,9 @@ def data_driven_test(*dsls, **kwdsls):
     def decorator(func):
         dep_message = "DatasetList object required for data_generator"
         for key, value in kwdsls.items():
-            if isinstance(value, (DatasetList, _DSLInstance)):
+            if isinstance(value, DatasetList):
                 value.apply_test_tags(key)
-            elif not isinstance(value, (DatasetList, _DSLInstance)):
+            elif not isinstance(value, DatasetList):
                 warn(dep_message, DeprecationWarning)
         setattr(func, DATA_DRIVEN_ATTR, list(dsls) + kwdsls.values())
         return func

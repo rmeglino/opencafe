@@ -101,13 +101,11 @@ class TargetTest(BaseCafeClass, ErrorMixin):
                 dataset_lists = self.get_var(
                     func, DATA_DRIVEN_ATTR, exit_on_error=False)
                 for dsl in dataset_lists:
-                    if not list(dsl):
-                        self.error(
-                            "TargetTest", "expand_tests",
-                            "DSL empty on dd_test: {0} dataset {1}".format(
-                                var_name, dsl), exit_on_error=False)
-                    for dataset in dsl:
-                        self.create_dd_func(cls, func, dataset)
+                    success = self.populate_dsl(
+                        dsl, var_name, cls, "expand_tests")
+                    if success:
+                        for dataset in dsl:
+                            self.create_dd_func(cls, func, dataset)
 
     def get_datasets(self, cls):
         if self.dd_class:
@@ -116,34 +114,52 @@ class TargetTest(BaseCafeClass, ErrorMixin):
                 if isinstance(self.dd_json, dict) else
                 self.dd_class(*self.dd_json)
                 if isinstance(self.dd_json, list) else self.dd_class())
-            if not list(dataset):
-                self.error(
-                    "TargetTest", "get_datasets",
-                    "Returned empty dataset: {0} args {1}".format(
-                        self._dd_class, self.dd_json))
             dataset_lists = [dataset]
         else:
             dataset_lists = self.get_var(cls, DATA_DRIVEN_ATTR, True)
         return dataset_lists
+
+    def populate_dsl(self, dsl, decorated_obj, test_class, calling_func_name):
+        try:
+            if not list(dsl):
+                self.error(
+                    "TargetTest", calling_func_name,
+                    "DSL {0} empty on {1} in class {2}".format(
+                        dsl.__class__.__name__, decorated_obj,
+                        test_class.__name__))
+            return True
+        except Exception as e:
+            self.error(
+                "TargetTest", calling_func_name,
+                "DSL {0} on {1} in class {2} threw exception".format(
+                    dsl.__class__.__name__, decorated_obj,
+                    test_class.__name__), e)
+        return False
 
     @property
     def classes(self):
         if self.test_module is None:
             return
         if self.test_class:
-            dataset_lists = self.get_datasets(self.test_class)
-            if dataset_lists is None:
-                yield self.test_class
-                return
-            for dsl in dataset_lists:
-                for dataset in dsl:
-                    yield self.create_dd_class(self.test_class, dataset)
+            classes = [self.test_class]
         else:
+            classes = []
             for name in dir(self.test_module):
                 obj = self.get_var(self.test_module, name, True)
                 if (isclass(obj) and issubclass(obj, unittest.TestCase) and
                         "fixture" not in obj.__name__.lower()):
-                    yield obj
+                    classes.append(obj)
+        for class_ in classes:
+            dataset_lists = self.get_datasets(class_)
+            if dataset_lists is None:
+                yield class_
+                continue
+            for dsl in dataset_lists:
+                success = self.populate_dsl(
+                    dsl, self.test_class.__name__, self.test_class, "classes")
+            if success:
+                for dataset in dsl:
+                    yield self.create_dd_class(class_, dataset)
 
     def __iter__(self):
         for cls, test_name in self.get_tests():
@@ -153,7 +169,7 @@ class TargetTest(BaseCafeClass, ErrorMixin):
         for cls in self.classes:
             if self.test_name:
                 test = self.get_var(cls, self.test_name, exit_on_error=False)
-                if test is not None:
+                if test:
                     yield cls, self.test_name
             else:
                 self.expand_tests(cls)
@@ -253,7 +269,7 @@ class SuiteBuilder(BaseCafeClass, ErrorMixin):
             self.error(
                 "Suite Builder", "_populate",
                 "Failed to import base module: {0}".format(path), e)
-            return
+            return False
         if path in self.packages:
             return
         else:
@@ -323,7 +339,8 @@ class SuiteBuilder(BaseCafeClass, ErrorMixin):
     def parse_dotpath(self, dotpath):
         if dotpath is None:
             return None, None, None
-        self._populate(dotpath)
+        if self._populate(dotpath) is False:
+            return None, None, None
         package = module = cls = None
         if dotpath in self.packages:
             package = dotpath

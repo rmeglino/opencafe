@@ -7,7 +7,7 @@ _cafe_runner()
     cur=$(echo "${COMP_WORDS[COMP_CWORD]}"|sed 's/\\/\\\\/g')
 
     if [[ ${cur} == -* ]]; then
-        options='--help --dry-run --data-directory --regex-list --file --result --result-directory --tags --verbose --workers --threads'
+        options='--help --dry-run --data-directory --regex-list --file --result --result-directory --tags --verbose --module-workers --threads --class-workers --test-workers'
         COMPREPLY="${COMPREPLY} "
     elif [[ ${COMP_CWORD} < 2 ]]; then
         options=$(python -c "from cafe.drivers.unittest.autocomplete import print_configs;print_configs()" 2>/dev/null)
