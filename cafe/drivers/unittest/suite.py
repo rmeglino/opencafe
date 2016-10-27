@@ -87,7 +87,7 @@ class OpenCafeUnittestTestSuite(TestSuite):
             except Exception as e:
                 if isinstance(result, _DebugResult):
                     raise
-                currentClass._classSetupFailed = True
+                unittest.skip(str(e))(currentClass)
                 className = util.strclass(currentClass)
                 errorName = 'setUpClass (%s)' % className
                 self._addClassOrModuleLevelException(
@@ -117,24 +117,31 @@ class OpenCafeUnittestTestSuite(TestSuite):
             result._previousTestClass = test_list[0].__class__
         else:
             return result
-
-        if workers == 1:
+        workers = workers if workers < len(run_list) else len(run_list)
+        if workers <= 1:
             for test in run_list:
                 test(result)
         else:
-            pool = Pool(workers)
-            results = pool.map(
-                lambda x: x[0](x[1]), [(test, CafeTextTestResult(
+            try:
+                pool = Pool(workers)
+                results = pool.map(self._run_test, [(test, CafeTextTestResult(
                     verbosity=result.verbosity)) for test in run_list])
-            pool.close()
-            for r in results:
-                result.addResult(r)
+                pool.close()
+                for r in results:
+                    result.addResult(r)
+            except:
+                pool.close()
+
         if suite_list:
             self._handleModuleTearDown(result)
             result._testRunEntered = False
         elif test_list:
             self._tearDownPreviousClass(test_list[0], result)
         return result
+
+    @staticmethod
+    def _run_test(args):
+        return args[0](args[1])
 
     def _addClassOrModuleLevelException(
             self, result, exception, errorName, currentClass=None):
@@ -143,6 +150,6 @@ class OpenCafeUnittestTestSuite(TestSuite):
             if currentClass is not None:
                 unittest.skip(str(exception))(currentClass)
             else:
-                result.addSkip(error, str(exception))
+                result.addModuleSkip(error, str(exception))
         else:
             result.addNonTestError(error, sys.exc_info())

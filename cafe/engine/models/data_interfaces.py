@@ -14,6 +14,8 @@
 import abc
 import json
 import os
+import warnings
+
 from six.moves import configparser
 from six import add_metaclass, PY3
 
@@ -46,6 +48,8 @@ class ConfigEnvironmentVariableError(Exception):
 
 
 def _get_path_from_env(os_env_var):
+    warnings.warn(
+        "_get_path_from_env deprecated do not use", DeprecationWarning)
     try:
         return os.environ[os_env_var]
     except KeyError:
@@ -57,6 +61,7 @@ def _get_path_from_env(os_env_var):
             "Unexpected exception when attempting to access '{1}'"
             " environment variable.".format(os_env_var))
         raise exception
+
 
 # Standard format to for flat key/value data sources
 CONFIG_KEY = 'CAFE_{section_name}__{key}'
@@ -126,8 +131,7 @@ class ConfigParserDataSource(DataSource):
         cafe_env_var = {key: value for key, value in os.environ.items()
                         if key.startswith('CAFE_')}
 
-        self._data_source = ConfigParser(
-            defaults=cafe_env_var)
+        self._data_source = ConfigParser(defaults=cafe_env_var)
         self._section_name = section_name
 
         # Check if the path exists
@@ -138,7 +142,11 @@ class ConfigParserDataSource(DataSource):
 
         # Read the file in and turn it into a SafeConfigParser instance
         try:
-            self._data_source.read(config_file_path)
+            with open(config_file_path) as fp:
+                if PY3:
+                    self._data_source.read_file(fp)
+                else:
+                    self._data_source.readfp(fp)
         except Exception as exception:
             self._log.exception(exception)
             raise exception

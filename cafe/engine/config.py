@@ -25,7 +25,11 @@ class EngineDataSource(object):
     def __init__(self, section_name):
         self._data_source = ConfigParser()
         self._section_name = section_name
-        self._data_source.read(ENGINE_CONFIG_PATH)
+        with open(ENGINE_CONFIG_PATH) as fp:
+            if PY3:
+                self._data_source.read_file(fp)
+            else:
+                self._data_source.readfp(fp)
 
     def get(self, item_name, default=None):
         match = 'CAFE_{0}__'.format(self._section_name)

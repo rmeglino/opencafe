@@ -162,7 +162,6 @@ class ArgumentParser(argparse.ArgumentParser):
             "--file", "-F",
             metavar="INPUT_FILE",
             type=argparse.FileType("r"),
-            nargs="?",
             help="Runs only tests listed in file."
                  "  Can be created by copying --dry-run response\n Format: "
                  "[test_name] (package[.module[.TestCase]][:package.module."
@@ -200,21 +199,18 @@ class ArgumentParser(argparse.ArgumentParser):
 
         self.add_argument(
             "--module-workers",
-            nargs="?",
             default=1,
             type=int,
             help="Set number of module subprocceses")
 
         self.add_argument(
             "--class-workers",
-            nargs="?",
             default=1,
             type=int,
             help="Set number of class subprocceses")
 
         self.add_argument(
             "--test-workers",
-            nargs="?",
             default=1,
             type=int,
             help="Set number of test subprocceses")

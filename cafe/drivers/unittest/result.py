@@ -2,9 +2,10 @@ from collections import defaultdict
 from datetime import datetime
 from threading import Lock
 from unittest import util
-import logging
-import traceback2 as traceback
 import inspect
+import logging
+import sys
+import traceback2 as traceback
 
 from six.moves import StringIO
 import unittest2
@@ -101,6 +102,7 @@ class CafeTestResult(BaseCafeClass):
         self.log_events = []
         self.running_tests = defaultdict(TestLog)
         self.test_log = []
+        self.module_skipped = 0
 
     @property
     def time(self):
@@ -123,6 +125,29 @@ class CafeTestResult(BaseCafeClass):
 
     def stopTest(self, test):
         test_log = self.running_tests[str(test)]
+        if test_log.status is None and test_log.subtests:
+            failure = any([
+                t.status in [
+                    TEST_STATUSES.FAILURE, TEST_STATUSES.UNEXPECTED_SUCCESS]
+                for t in test_log.subtests])
+            error = any([
+                t.status == TEST_STATUSES.ERROR for t in test_log.subtests])
+            skipped = any([
+                t.status == TEST_STATUSES.SKIP for t in test_log.subtests])
+            if error:
+                try:
+                    raise Exception("At least one subtest errored")
+                except:
+                    self.addError(test, sys.exc_info())
+
+            elif failure:
+                try:
+                    raise Exception("At least one subtest failed")
+                except:
+                    self.addFailure(test, sys.exc_info())
+            elif skipped:
+                self.addSkip(test, "At least one subtest skipped")
+
         test_log.stop_time = datetime.now()
         del self.running_tests[str(test)]
         self.test_log.append(test_log)
@@ -154,7 +179,7 @@ class CafeTestResult(BaseCafeClass):
     def addSubTest(self, test, subtest, err):
         test_log = self.running_tests[str(test)]
         subtest_log = TestLog()
-        test_log.append(subtest_log)
+        test_log.subtests.append(subtest_log)
         subtest_log.name = str(subtest)
         if err is not None:
             if issubclass(err[0], test.failureException):
@@ -163,7 +188,7 @@ class CafeTestResult(BaseCafeClass):
                 subtest_log.status = TEST_STATUSES.ERROR
             subtest_log.err = self._exc_info_to_string(err, test)
         else:
-            subtest.status = TEST_STATUSES.SUCCESS
+            subtest_log.status = TEST_STATUSES.SUCCESS
 
     def addSuccess(self, test):
         self.successes += 1
@@ -171,7 +196,19 @@ class CafeTestResult(BaseCafeClass):
         test_log.status = TEST_STATUSES.SUCCESS
 
     def addSkip(self, test, reason):
+        if hasattr(test, "test_case"):
+            test_log = self.running_tests[str(test.test_case)]
+            subtest_log = TestLog()
+            test_log.subtests.append(subtest_log)
+            subtest_log.status = TEST_STATUSES.SKIP
+            subtest_log.name = str(test)
+            return
         self.skipped += 1
+        test_log = self.running_tests[str(test)]
+        test_log.status = TEST_STATUSES.SKIP
+
+    def addModuleSkip(self, test, reason):
+        self.module_skipped += 1
         test_log = self.running_tests[str(test)]
         test_log.status = TEST_STATUSES.SKIP
 
@@ -256,6 +293,7 @@ class CafeTextTestResult(CafeTestResult):
         self.expectedFailures += result.expectedFailures
         self.failures += result.failures
         self.skipped += result.skipped
+        self.module_skipped += result.module_skipped
         self.successes += result.successes
         self.tb_locals |= result.tb_locals
         self.testsRun += result.testsRun
@@ -317,6 +355,15 @@ class CafeTextTestResult(CafeTestResult):
             self.stream.write("s")
             self.stream.flush()
 
+    def addModuleSkip(self, test, reason):
+        super(CafeTextTestResult, self).addModuleSkip(test, reason)
+        if self.showAll:
+            self._printtest(test)
+            self.stream.writeln("{0} {1}".format(TEST_STATUSES.SKIP, reason))
+        elif self.dots:
+            self.stream.write("s")
+            self.stream.flush()
+
     def addExpectedFailure(self, test, err):
         super(CafeTextTestResult, self).addExpectedFailure(test, err)
         if self.showAll:
@@ -349,6 +396,14 @@ class CafeTextTestResult(CafeTestResult):
                     "{0}: {1}".format(status, test.description or test.name))
                 self.stream.writeln(self.separator2)
                 self.stream.writeln(test.err)
+            for subtest in test.subtests:
+                if subtest.status == status:
+                    self.stream.writeln(self.separator1)
+                    self.stream.writeln(
+                        "{0}: {1}".format(
+                            status, subtest.description or subtest.name))
+                    self.stream.writeln(self.separator2)
+                    self.stream.writeln(subtest.err)
 
     def log_result(self):
         """Gets logs records added to test"""
@@ -361,7 +416,7 @@ class CafeTextTestResult(CafeTestResult):
     def addSubTest(self, test, subtest, err):
         super(CafeTextTestResult, self).addSubTest(test, subtest, err)
         log = self.running_tests[str(test)].subtests[-1]
-        self.stream.writeln("\n\t{0} ... {1}".format(log.name, log.status))
+        self.stream.writeln("{0} ... {1}".format(log.name, log.status))
 
     def getDescription(self, test):
         doc_first_line = test.shortDescription()
@@ -375,12 +430,14 @@ class CafeTextTestResult(CafeTestResult):
         self.stream.writeln("-" * 70)
         self.stream.writeln("Ran {0} test{1} in {2:.3f}s".format(
             self.testsRun, "s" * bool(self.testsRun - 1), self.time))
-        err = ""
-        err += "failures={0}".format(self.failures)
-        err += "{0}skipped={1}".format(" " * bool(err), self.skipped)
-        err += "{0}errors={1}".format(" " * bool(err), self.errors)
-        err += "{0}class/module errors={1}".format(
-            " " * bool(err), self.non_test_errors)
+        err = "successes={0}".format(self.successes)
+        err += " failures={0}".format(self.failures)
+        err += " skipped={0}".format(self.skipped)
+        err += " errors={0}".format(self.errors)
+        err += " expectedFailures={0}".format(self.expectedFailures)
+        err += " unexpectedSuccesses={0}".format(self.unexpectedSuccesses)
+        err += " class/module errors={0}".format(self.non_test_errors)
+        err += " skipped modules={0}".format(self.module_skipped)
         status = "PASSED" if self.wasSuccessful() else "FAILED"
         self.stream.writeln(
             "\n{0}{1}".format(status, " ({})".format(err) * bool(err)))

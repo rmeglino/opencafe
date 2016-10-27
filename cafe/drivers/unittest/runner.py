@@ -16,10 +16,7 @@ import sys
 
 # Support for the alternate dill-based multiprocessing library 'multiprocess'
 # as an experimental workaround if you're having pickling errors.
-try:
-    from multiprocess import Process, Queue
-except:
-    from multiprocessing import Process, Queue
+from multiprocess import Process, Queue
 
 from unittest2.case import _CapturingHandler as CapturingHandler
 import logging
@@ -60,7 +57,12 @@ class UnittestRunner(BaseCafeClass, ErrorMixin):
         from_worker = Queue()
         targets = list(self.suite_builder.load_all(
             self.cl_args.testrepos, self.cl_args.file).items())
-        for _ in range(self.cl_args.module_workers):
+        print(len(targets))
+        if self.cl_args.module_workers <= len(targets):
+            module_workers = self.cl_args.module_workers
+        else:
+            module_workers = len(targets) if len(targets) > 0 else 1
+        for _ in range(module_workers):
             proc = Consumer(
                 to_worker, from_worker, self.cl_args.verbose,
                 self.cl_args.class_workers, self.cl_args.test_workers)
@@ -70,7 +72,7 @@ class UnittestRunner(BaseCafeClass, ErrorMixin):
         for count, (module, tests) in enumerate(targets, 1):
             to_worker.put((module, tests))
 
-        for _ in range(self.cl_args.module_workers):
+        for _ in range(module_workers):
             to_worker.put(None)
 
         # A second try catch is needed here because queues can cause locking
@@ -140,6 +142,8 @@ class Consumer(Process, BaseCafeClass, ErrorMixin):
     def run(self):
         """Starts the worker listening"""
         logger = logging.getLogger('')
+        root_log = logging.getLogger()
+        [handler.close()for handler in root_log.handlers]
         while True:
             result = CafeTextTestResult(verbosity=self.verbose)
             suite = OpenCafeUnittestTestSuite(
