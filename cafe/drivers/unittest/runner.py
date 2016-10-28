@@ -57,7 +57,6 @@ class UnittestRunner(BaseCafeClass, ErrorMixin):
         from_worker = Queue()
         targets = list(self.suite_builder.load_all(
             self.cl_args.testrepos, self.cl_args.file).items())
-        print(len(targets))
         if self.cl_args.module_workers <= len(targets):
             module_workers = self.cl_args.module_workers
         else:

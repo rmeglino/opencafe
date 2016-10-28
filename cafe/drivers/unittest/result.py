@@ -101,7 +101,7 @@ class CafeTestResult(BaseCafeClass):
         self.unexpectedSuccesses = 0
         self.log_events = []
         self.running_tests = defaultdict(TestLog)
-        self.test_log = []
+        self.test_logs = []
         self.module_skipped = 0
 
     @property
@@ -150,7 +150,7 @@ class CafeTestResult(BaseCafeClass):
 
         test_log.stop_time = datetime.now()
         del self.running_tests[str(test)]
-        self.test_log.append(test_log)
+        self.test_logs.append(test_log)
 
     def stopTestRun(self):
         self.stop_time = datetime.now()
@@ -299,7 +299,7 @@ class CafeTextTestResult(CafeTestResult):
         self.testsRun += result.testsRun
         self.unexpectedSuccesses += result.unexpectedSuccesses
         self.log_events += result.log_events
-        self.test_log += result.test_log
+        self.test_logs += result.test_log
         self.non_test_errors += result.non_test_errors
         self.running_tests.update(result.running_tests)
         if hasattr(result.stream, "getvalue"):
@@ -389,7 +389,7 @@ class CafeTextTestResult(CafeTestResult):
         self.printErrorList(TEST_STATUSES.FAILURE)
 
     def printErrorList(self, status):
-        for test in list(self.running_tests.values()) + self.test_log:
+        for test in list(self.running_tests.values()) + self.test_logs:
             if test.status == status:
                 self.stream.writeln(self.separator1)
                 self.stream.writeln(
